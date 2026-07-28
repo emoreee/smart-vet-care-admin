@@ -742,7 +742,7 @@ class ViewPetDetailsModal extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Owner Details Card
+            // REGISTERED OWNER (Light Violet / Indigo Soft Tinted Card)
             FutureBuilder<DocumentSnapshot>(
               future: ownerDocId.isNotEmpty
                   ? FirebaseFirestore.instance
@@ -752,44 +752,124 @@ class ViewPetDetailsModal extends StatelessWidget {
                   : null,
               builder: (context, userSnap) {
                 String ownerName = pet['ownerId'] ?? 'N/A';
+                String ownerId = pet['ownerId'] ?? 'OWN-00000';
                 String phone = 'N/A';
+
                 if (userSnap.hasData && userSnap.data!.exists) {
                   final userData =
                       userSnap.data!.data() as Map<String, dynamic>?;
                   ownerName = userData?['fullName'] ?? ownerName;
+                  ownerId =
+                      userData?['ownerID'] ?? userData?['ownerId'] ?? ownerId;
                   phone = userData?['phone'] ?? phone;
                 }
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_pin_outlined,
-                          color: Color(0xFF4F46E5), size: 24),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'REGISTERED OWNER',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF6366F1),
+                          letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(
+                            0xFFF5F3FF), // Soft Light Violet / Lavender Tint
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(
+                                0xFFDDD6FE)), // Subtle Violet Border
+                      ),
+                      child: Row(
                         children: [
-                          Text('REGISTERED OWNER',
-                              style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF4F46E5))),
-                          Text('$ownerName (${pet['ownerId'] ?? ''})',
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A))),
-                          Text('Contact: $phone',
-                              style: const TextStyle(
-                                  fontSize: 11, color: Color(0xFF64748B))),
+                          // User Avatar Circle with Violet Accent
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEDE9FE),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.person_outline,
+                                color: Color(0xFF6366F1), size: 22),
+                          ),
+                          const SizedBox(width: 14),
+
+                          // Owner Name & ID Column
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Owner Name',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF8B5CF6),
+                                        fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  ownerName,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  ownerId,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF7C3AED)),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Contact Number Column
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Contact Number',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF8B5CF6),
+                                        fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.phone_outlined,
+                                        size: 14, color: Color(0xFF6366F1)),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      phone,
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F172A)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // External Link Icon with Violet Accent
+                          const Icon(Icons.open_in_new,
+                              size: 18, color: Color(0xFF8B5CF6)),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -930,7 +1010,7 @@ class _EditPetModalState extends State<EditPetModal> {
     );
   }
 
-  // Calendar Picker Function
+  // Compact & Modern Custom Date Picker
   Future<void> _selectDate(
       BuildContext context, TextEditingController controller) async {
     DateTime initialDate = DateTime.now();
@@ -945,16 +1025,39 @@ class _EditPetModalState extends State<EditPetModal> {
       initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
+      initialEntryMode: DatePickerEntryMode
+          .calendarOnly, // Tinataggal ang side panel / input mode
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF0F172A),
-              onPrimary: Colors.white,
-              onSurface: Color(0xFF0F172A),
+              primary: Color(0xFF0F172A), // Dark Slate Header & Selected Day
+              onPrimary: Colors.white, // White Text sa napiling araw
+              surface: Colors.white, // Calendar Background
+              onSurface: Color(0xFF0F172A), // Calendar Numbers
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor:
+                    const Color(0xFF4F46E5), // Indigo Cancel/OK buttons
+                textStyle:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
           ),
-          child: child!,
+          child: MediaQuery(
+            // Pino-force ang compact view para walang portrait sidebar sa web
+            data: MediaQuery.of(context).copyWith(
+              size: const Size(320, 420),
+            ),
+            child: child!,
+          ),
         );
       },
     );
