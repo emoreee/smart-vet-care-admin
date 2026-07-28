@@ -854,7 +854,7 @@ class ViewPetDetailsModal extends StatelessWidget {
 }
 
 // ==========================================
-// 3. EDIT PET DETAILS MODAL
+// 1. UPGRADED EDIT PET DETAILS MODAL
 // ==========================================
 class EditPetModal extends StatefulWidget {
   final String petDocId;
@@ -898,11 +898,23 @@ class _EditPetModalState extends State<EditPetModal> {
     _gender = widget.currentPet['gender'] ?? 'Male';
   }
 
-  InputDecoration _inputDeco(String label) {
+  @override
+  void dispose() {
+    _petNameController.dispose();
+    _breedController.dispose();
+    _birthDateController.dispose();
+    _markingsController.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _inputDeco(String label, {String? hint, Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
+      hintText: hint,
+      suffixIcon: suffixIcon,
       labelStyle: const TextStyle(
           fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -916,6 +928,44 @@ class _EditPetModalState extends State<EditPetModal> {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
     );
+  }
+
+  // Calendar Picker Function
+  Future<void> _selectDate(
+      BuildContext context, TextEditingController controller) async {
+    DateTime initialDate = DateTime.now();
+    if (controller.text.isNotEmpty) {
+      try {
+        initialDate = DateTime.parse(controller.text);
+      } catch (_) {}
+    }
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F172A),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        final formattedMonth = picked.month.toString().padLeft(2, '0');
+        final formattedDay = picked.day.toString().padLeft(2, '0');
+        controller.text = "${picked.year}-$formattedMonth-$formattedDay";
+      });
+    }
   }
 
   void _updatePetInFirestore() async {
@@ -960,39 +1010,77 @@ class _EditPetModalState extends State<EditPetModal> {
 
   @override
   Widget build(BuildContext context) {
+    final petDisplayId = widget.currentPet['petId'] ?? '#00000';
+
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(28),
+        width: 520,
+        padding: const EdgeInsets.all(32),
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Styled Header with Pet ID Badge
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text("Edit Pet: ${widget.currentPet['petId'] ?? ''}",
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A))),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text("Edit Pet Details",
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A))),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(petDisplayId,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF4F46E5))),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                          "Update patient information and medical attributes.",
+                          style: TextStyle(
+                              fontSize: 12, color: Color(0xFF64748B))),
+                    ],
+                  ),
                   IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(context)),
+                    icon: const Icon(Icons.close,
+                        size: 20, color: Color(0xFF64748B)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
+
+              // Pet Name
               TextFormField(
                 controller: _petNameController,
                 decoration: _inputDeco('Pet Name*'),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
+
+              // Species & Gender Row
               Row(
                 children: [
                   Expanded(
@@ -1020,7 +1108,9 @@ class _EditPetModalState extends State<EditPetModal> {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
+
+              // Breed & Date of Birth (with Calendar Popup)
               Row(
                 children: [
                   Expanded(
@@ -1035,35 +1125,50 @@ class _EditPetModalState extends State<EditPetModal> {
                   Expanded(
                     child: TextFormField(
                       controller: _birthDateController,
-                      decoration: _inputDeco('Date of Birth*'),
+                      readOnly: true,
+                      onTap: () => _selectDate(context, _birthDateController),
+                      decoration: _inputDeco(
+                        'Date of Birth*',
+                        hint: 'YYYY-MM-DD',
+                        suffixIcon: const Icon(Icons.calendar_today_outlined,
+                            size: 18, color: Color(0xFF64748B)),
+                      ),
                       validator: (v) =>
                           (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
+
+              // Color & Markings
               TextFormField(
                 controller: _markingsController,
                 decoration: _inputDeco('Color & Markings'),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
+
+              // Action Buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel',
-                          style: TextStyle(color: Color(0xFF64748B)))),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel',
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                  ),
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: _isSaving ? null : _updatePetInFirestore,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0F172A),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
+                          horizontal: 24, vertical: 14),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                     child: _isSaving
                         ? const SizedBox(
@@ -1074,7 +1179,8 @@ class _EditPetModalState extends State<EditPetModal> {
                         : const Text('Update Pet Record',
                             style: TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold)),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
                   ),
                 ],
               ),
@@ -1087,7 +1193,7 @@ class _EditPetModalState extends State<EditPetModal> {
 }
 
 // ==========================================
-// ADD NEW PET MODAL (AUTOCOMPLETE)
+// 2. UPGRADED ADD NEW PET MODAL (WITH CALENDAR)
 // ==========================================
 class AddPetModal extends StatefulWidget {
   final String nextPetId;
@@ -1113,11 +1219,22 @@ class _AddPetModalState extends State<AddPetModal> {
   String _gender = 'Male';
   bool _isSaving = false;
 
-  InputDecoration _inputDeco(String label, {String? hint, Widget? prefixIcon}) {
+  @override
+  void dispose() {
+    _petNameController.dispose();
+    _breedController.dispose();
+    _birthDateController.dispose();
+    _markingsController.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _inputDeco(String label,
+      {String? hint, Widget? prefixIcon, Widget? suffixIcon}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
       prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
       labelStyle: const TextStyle(
           fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
       hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
@@ -1135,6 +1252,37 @@ class _AddPetModalState extends State<AddPetModal> {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
     );
+  }
+
+  // Calendar Picker Function
+  Future<void> _selectDate(
+      BuildContext context, TextEditingController controller) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF0F172A),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        final formattedMonth = picked.month.toString().padLeft(2, '0');
+        final formattedDay = picked.day.toString().padLeft(2, '0');
+        controller.text = "${picked.year}-$formattedMonth-$formattedDay";
+      });
+    }
   }
 
   void _savePetToFirestore() async {
@@ -1433,20 +1581,24 @@ class _AddPetModalState extends State<AddPetModal> {
                     child: TextFormField(
                       controller: _breedController,
                       decoration: _inputDeco('Breed*', hint: 'e.g., Shih Tzu'),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Please enter breed'
-                          : null,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: TextFormField(
                       controller: _birthDateController,
-                      decoration:
-                          _inputDeco('Date of Birth*', hint: 'YYYY-MM-DD'),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Please enter date of birth'
-                          : null,
+                      readOnly: true,
+                      onTap: () => _selectDate(context, _birthDateController),
+                      decoration: _inputDeco(
+                        'Date of Birth*',
+                        hint: 'YYYY-MM-DD',
+                        suffixIcon: const Icon(Icons.calendar_today_outlined,
+                            size: 18, color: Color(0xFF64748B)),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                   ),
                 ],
