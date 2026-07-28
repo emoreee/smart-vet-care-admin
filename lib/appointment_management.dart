@@ -432,12 +432,12 @@ class _AppointmentManagementScreenState
     );
   }
 
-  Widget _buildAppointmentsTable(List<QueryDocumentSnapshot> allDocs) {
+  Widget _buildAppointmentsTable(List<QueryDocumentSnapshot> allAppointments) {
     String targetStatus = 'Pending';
     if (_activeTab == 'Confirmed') targetStatus = 'Confirmed';
     if (_activeTab == 'Completed') targetStatus = 'Completed';
 
-    final filteredDocs = allDocs.where((doc) {
+    final filteredDocs = allAppointments.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       final status = (data['status'] ?? '').toString();
       final petName = (data['petName'] ?? '').toString().toLowerCase();
@@ -459,10 +459,11 @@ class _AppointmentManagementScreenState
         Table(
           columnWidths: const {
             0: FlexColumnWidth(1.2), // PET ID
-            1: FlexColumnWidth(2.0), // PET INFO
+            1: FlexColumnWidth(1.8), // PET INFO
             2: FlexColumnWidth(2.0), // OWNER
             3: FlexColumnWidth(2.2), // DATE & TIME
-            4: FlexColumnWidth(1.8), // ACTIONS
+            4: FlexColumnWidth(1.8), // SERVICE (Separated Column)
+            5: FlexColumnWidth(1.8), // ACTIONS
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -472,6 +473,7 @@ class _AppointmentManagementScreenState
                 _TableHeader('PET INFO'),
                 _TableHeader('OWNER'),
                 _TableHeader('DATE & TIME'),
+                _TableHeader('SERVICE'), // NEW COLUMN
                 _TableHeader('ACTIONS'),
               ],
             ),
@@ -491,7 +493,7 @@ class _AppointmentManagementScreenState
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Showing 1 to ${filteredDocs.length} of ${allDocs.where((doc) => (doc.data() as Map<String, dynamic>)['status'] == targetStatus).length} ${_activeTab.toLowerCase()} entries',
+              'Showing 1 to ${filteredDocs.length} of ${allAppointments.where((doc) => (doc.data() as Map<String, dynamic>)['status'] == targetStatus).length} ${_activeTab.toLowerCase()} entries',
               style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
             ),
             Row(
@@ -512,6 +514,49 @@ class _AppointmentManagementScreenState
     );
   }
 
+  // Helper function para gawing formatted words ang Date (hal. July 29, 2026)
+  String _formatDateToWords(String rawDate) {
+    if (rawDate.isEmpty || rawDate == 'TBD') return 'TBD';
+
+    try {
+      DateTime parsedDate;
+      // Handle DD/MM/YYYY format
+      if (rawDate.contains('/')) {
+        final parts = rawDate.split('/');
+        if (parts.length == 3) {
+          final day = int.parse(parts[0]);
+          final month = int.parse(parts[1]);
+          final year = int.parse(parts[2]);
+          parsedDate = DateTime(year, month, day);
+        } else {
+          return rawDate;
+        }
+      } else {
+        // Handle YYYY-MM-DD format
+        parsedDate = DateTime.parse(rawDate);
+      }
+
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ];
+
+      return "${months[parsedDate.month - 1]} ${parsedDate.day}, ${parsedDate.year}";
+    } catch (_) {
+      return rawDate; // Fallback kung custom text
+    }
+  }
+
   TableRow _buildRow(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final docId = doc.id;
@@ -520,7 +565,8 @@ class _AppointmentManagementScreenState
     final petName = data['petName'] ?? 'N/A';
     final species = data['species'] ?? 'Pet';
     final ownerName = data['ownerName'] ?? 'N/A';
-    final date = data['date'] ?? 'TBD';
+    final rawDate = data['date'] ?? 'TBD';
+    final formattedDate = _formatDateToWords(rawDate);
     final timeSlot = data['timeSlot'] ?? '';
     final service = data['service'] ?? 'Checkup';
     final status = data['status'] ?? 'Pending';
@@ -561,18 +607,43 @@ class _AppointmentManagementScreenState
         ),
         Text(ownerName,
             style: const TextStyle(fontSize: 13, color: Color(0xFF334155))),
+
+        // DATE & TIME Column
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text("$date $timeSlot",
+            Text(
+              formattedDate,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Color(0xFF0F172A)),
+            ),
+            if (timeSlot.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                timeSlot,
                 style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: Color(0xFF0F172A))),
-            Text(service,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B)),
+              ),
+            ],
           ],
         ),
+
+        // SERVICE Column (Clean Plain Text)
+        Text(
+          service,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF334155),
+          ),
+        ),
+
+        // ACTIONS Column
         Row(
           children: [
             if (status == 'Pending') ...[
