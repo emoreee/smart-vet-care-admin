@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sidebar.dart';
+import 'services/firestore_service.dart';
 
 class UserAccountScreen extends StatefulWidget {
   const UserAccountScreen({super.key});
@@ -9,194 +11,103 @@ class UserAccountScreen extends StatefulWidget {
 }
 
 class _UserAccountScreenState extends State<UserAccountScreen> {
-  // Directory Data List with 1-to-Many Pet Relationships
-  final List<Map<String, dynamic>> _userDirectory = [
-    {
-      'id': 'OWN-00001',
-      'ownerName': 'Junexenne Agravante',
-      'email': 'admin@furryfriends.com',
-      'phone': '+63 917 123 4567',
-      'address': 'Quezon City, Metro Manila',
-      'pets': ['Ming Ming (Aspin)', 'Choco (Poodle)'],
-    },
-    {
-      'id': 'OWN-00002',
-      'ownerName': 'Elena Rodriguez',
-      'email': 'elena.rod@web.com',
-      'phone': '+63 918 987 6543',
-      'address': 'Pasig City, Metro Manila',
-      'pets': ['Luna (Siberian Husky)'],
-    },
-    {
-      'id': 'OWN-00003',
-      'ownerName': 'Marcus Chen',
-      'email': 'm.chen@petmail.org',
-      'phone': '+63 920 333 4444',
-      'address': 'Mandaluyong City, Metro Manila',
-      'pets': ['Bubbles (Pug)', 'Milo (Persian Cat)', 'Leo (Golden Retriever)'],
-    },
-    {
-      'id': 'OWN-00004',
-      'ownerName': 'Sarah Jenkins',
-      'email': 's.jenkins@fastmail.com',
-      'phone': '+63 915 555 7788',
-      'address': 'Makati City, Metro Manila',
-      'pets': ['Oliver (Tabby Cat)'],
-    },
-  ];
+  final FirestoreService _firestoreService = FirestoreService();
 
-  // Open "Add New Pet Owner" Modal Directly
-  Future<void> _openAddOwnerModal(BuildContext context) async {
-    final int nextIdNumber = _userDirectory.length + 1;
+  // State Variable para sa Sorting Filter
+  String _sortOption =
+      'newest'; // Options: 'newest', 'oldest', 'id_asc', 'id_desc'
+
+  // 1. Open "Add New Pet Owner" Dialog
+  Future<void> _openAddOwnerModal(int currentCount) async {
     final String nextGeneratedId =
-        'OWN-${nextIdNumber.toString().padLeft(5, '0')}'; // e.g., "OWN-00005"
+        'OWN-${(currentCount + 1).toString().padLeft(5, '0')}';
 
     final newOwnerData = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: true,
-      builder: (BuildContext context) {
-        return AddNewOwnerDialog(generatedId: nextGeneratedId);
-      },
+      builder: (context) => AddNewOwnerDialog(generatedId: nextGeneratedId),
     );
 
     if (newOwnerData != null && mounted) {
-      setState(() {
-        _userDirectory.add(newOwnerData);
-      });
+      try {
+        await _firestoreService.addPetOwner(
+          ownerId: newOwnerData['id'],
+          fullName: newOwnerData['ownerName'],
+          phone: newOwnerData['phone'],
+          address: newOwnerData['address'],
+          password: newOwnerData['password'],
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Successfully added owner ${newOwnerData['ownerName']} (#${newOwnerData['id']})!',
-          ),
-          backgroundColor: const Color(0xFF166534),
-        ),
-      );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Successfully registered ${newOwnerData['ownerName']}!'),
+              backgroundColor: const Color(0xFF166534),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error saving owner: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
     }
   }
 
-  // View Owner Details Modal
-  void _showOwnerDetailsModal(Map<String, dynamic> user) {
+  // 2. Open "View Linked Pets" Dialog (Eye Icon)
+  void _openViewPetsModal(String ownerDocId, String ownerId, String ownerName) {
     showDialog(
       context: context,
-      builder: (context) {
-        final List<String> pets = List<String>.from(user['pets'] ?? []);
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          title: Row(
-            children: [
-              const Icon(
-                Icons.account_circle_outlined,
-                color: Color(0xFF312E81),
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                user['ownerName'],
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _detailRow('Owner ID:', user['id']),
-              _detailRow('Email Address:', user['email']),
-              _detailRow('Contact Phone:', user['phone']),
-              _detailRow('Residential Address:', user['address']),
-              const SizedBox(height: 12),
-              const Text(
-                'Registered Pets:',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF475569),
-                ),
-              ),
-              const SizedBox(height: 6),
-              if (pets.isEmpty)
-                const Text(
-                  'No pets linked yet.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF94A3B8),
-                    fontStyle: FontStyle.italic,
-                  ),
-                )
-              else
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: pets
-                      .map(
-                        (p) => Chip(
-                          label: Text(
-                            p,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF312E81),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          backgroundColor: const Color(0xFFEEF2FF),
-                          side: const BorderSide(color: Color(0xFFC7D2FE)),
-                          padding: EdgeInsets.zero,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      )
-                      .toList(),
-                ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-              ),
-              child: const Text(
-                'Close',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ],
-        );
-      },
+      builder: (context) => ViewPetsDialog(
+        ownerDocId: ownerDocId,
+        ownerId: ownerId,
+        ownerName: ownerName,
+      ),
     );
   }
 
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-              textAlign: TextAlign.end,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+  // 3. Open "Edit Owner" Dialog (Pencil Icon)
+  Future<void> _openEditOwnerModal(
+      String docId, Map<String, dynamic> currentData) async {
+    final updatedData = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => EditOwnerDialog(
+        docId: docId,
+        currentData: currentData,
       ),
     );
+
+    if (updatedData != null && mounted) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(docId).update({
+          'fullName': updatedData['fullName'],
+          'phone': updatedData['phone'],
+          'address': updatedData['address'],
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('User details updated successfully!'),
+              backgroundColor: Color(0xFF166534),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error updating user: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -205,82 +116,138 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       body: Row(
         children: [
-          // Sidebar Navigation Menu
           const SidebarMenu(activeRoute: 'user_account'),
-
-          // Main Content Area
           Expanded(
             child: Column(
               children: [
                 const _TopHeader(),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(28.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Page Title Header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    padding: const EdgeInsets.all(32.0),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: _firestoreService.getPetOwners(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(40.0),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+
+                        List<QueryDocumentSnapshot> docs =
+                            List.from(snapshot.data?.docs ?? []);
+
+                        // Sorting Logic
+                        docs.sort((a, b) {
+                          final dataA = a.data() as Map<String, dynamic>;
+                          final dataB = b.data() as Map<String, dynamic>;
+
+                          final String idA = dataA['ownerID'] ??
+                              dataA['ownerId'] ??
+                              'OWN-00000';
+                          final String idB = dataB['ownerID'] ??
+                              dataB['ownerId'] ??
+                              'OWN-00000';
+
+                          final Timestamp? timeA =
+                              dataA['createdAt'] as Timestamp?;
+                          final Timestamp? timeB =
+                              dataB['createdAt'] as Timestamp?;
+
+                          if (_sortOption == 'oldest') {
+                            if (timeA != null && timeB != null)
+                              return timeA.compareTo(timeB);
+                            return idA.compareTo(idB);
+                          } else if (_sortOption == 'id_asc') {
+                            return idA.compareTo(idB);
+                          } else if (_sortOption == 'id_desc') {
+                            return idB.compareTo(idA);
+                          } else {
+                            if (timeA != null && timeB != null)
+                              return timeB.compareTo(timeA);
+                            return idB.compareTo(idA);
+                          }
+                        });
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Text(
-                                  'Hello, Admin!',
-                                  style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
-                                  ),
+                            // Header Title & ADD Button
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: const [
+                                    Text(
+                                      'Hello, Admin!',
+                                      style: TextStyle(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF0F172A)),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Manage user accounts and pet owner records.',
+                                      style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontSize: 13),
+                                    ),
+                                  ],
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Manage user accounts and pet owner records.',
-                                  style: TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontSize: 13,
+                                ElevatedButton.icon(
+                                  onPressed: () =>
+                                      _openAddOwnerModal(docs.length),
+                                  icon: const Icon(Icons.add,
+                                      size: 18, color: Colors.white),
+                                  label: const Text('ADD',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24, vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
                                   ),
                                 ),
                               ],
                             ),
-                            ElevatedButton.icon(
-                              onPressed: () => _openAddOwnerModal(context),
-                              icon: const Icon(
-                                Icons.add,
-                                size: 18,
-                                color: Colors.white,
-                              ),
-                              label: const Text(
-                                'ADD',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 22,
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
+                            const SizedBox(height: 28),
+
+                            // Top Stat Cards
+                            StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('pets')
+                                  .snapshots(),
+                              builder: (context, petSnapshot) {
+                                final totalPets =
+                                    petSnapshot.data?.docs.length ?? 0;
+
+                                return Row(
+                                  children: [
+                                    _buildStatCard('Total Users',
+                                        '${docs.length}', Icons.people_outline),
+                                    const SizedBox(width: 20),
+                                    _buildStatCard('Active Pets', '$totalPets',
+                                        Icons.pets_outlined),
+                                  ],
+                                );
+                              },
                             ),
+                            const SizedBox(height: 32),
+
+                            // User Directory Card
+                            _buildDirectoryCard(docs),
                           ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Metric Stat Cards Row
-                        const _SummaryCardsRow(),
-                        const SizedBox(height: 24),
-
-                        // User Directory Table
-                        _buildUserDirectoryCard(),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -292,61 +259,123 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
     );
   }
 
-  // USER DIRECTORY TABLE CARD WITH UPDATED COLUMNS
-  Widget _buildUserDirectoryCard() {
+  // Stat Card Widget
+  Widget _buildStatCard(String title, String count, IconData icon) {
+    return Container(
+      width: 320,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: const Color(0xFF4F46E5), size: 22),
+          ),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 2),
+              Text(count,
+                  style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Directory Table Container
+  Widget _buildDirectoryCard(List<QueryDocumentSnapshot> docs) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'User Directory',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
+              const Text('User Directory',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A))),
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.filter_list,
-                      color: Color(0xFF64748B),
-                      size: 18,
-                    ),
-                    onPressed: () {},
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.filter_list,
+                        size: 20, color: Color(0xFF64748B)),
+                    tooltip: 'Filter & Sort Order',
+                    onSelected: (value) {
+                      setState(() {
+                        _sortOption = value;
+                      });
+                    },
+                    itemBuilder: (context) => [
+                      CheckedPopupMenuItem(
+                        value: 'newest',
+                        checked: _sortOption == 'newest',
+                        child: const Text('Newest First (Pinakabago)',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'oldest',
+                        checked: _sortOption == 'oldest',
+                        child: const Text('Oldest First (Pinakauna)',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                      const PopupMenuDivider(),
+                      CheckedPopupMenuItem(
+                        value: 'id_asc',
+                        checked: _sortOption == 'id_asc',
+                        child: const Text('ID: Ascending (OWN-00001 → 00004)',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'id_desc',
+                        checked: _sortOption == 'id_desc',
+                        child: const Text('ID: Descending (OWN-00004 → 00001)',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                    ],
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.file_download_outlined,
-                      color: Color(0xFF64748B),
-                      size: 18,
-                    ),
-                    onPressed: () {},
-                  ),
+                      onPressed: () {},
+                      icon: const Icon(Icons.file_download_outlined,
+                          size: 20, color: Color(0xFF64748B))),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-
-          // UPDATED TABLE COLUMNS & PROPORTIONS
+          const SizedBox(height: 20),
           Table(
             columnWidths: const {
-              0: FlexColumnWidth(1.2), // ID NUMBER
-              1: FlexColumnWidth(2.2), // OWNER DETAILS
-              2: FlexColumnWidth(2.2), // REGISTERED PETS
-              3: FlexColumnWidth(2.0), // ADDRESS
-              4: FlexColumnWidth(1.0), // ACTIONS (Edit & Details)
+              0: FlexColumnWidth(1.2),
+              1: FlexColumnWidth(2.5),
+              2: FlexColumnWidth(1.8),
+              3: FlexColumnWidth(2.2),
+              4: FlexColumnWidth(1.0),
             },
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             children: [
@@ -359,55 +388,37 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
                   _TableHeader('ACTIONS'),
                 ],
               ),
-              for (var user in _userDirectory) _buildDirectoryRow(user),
+              for (var doc in docs) _buildUserRow(doc),
             ],
           ),
           const SizedBox(height: 24),
-
-          // Pagination Footer
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Showing ${_userDirectory.length} of 1,284 entries',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                'Showing ${docs.length} of ${docs.length} entries',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               ),
               Row(
                 children: [
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: null,
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text(
-                      'Previous',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                    ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12)),
+                    child: const Text('Previous',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: null,
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text(
-                      'Next',
-                      style: TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                    ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12)),
+                    child: const Text('Next',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
                   ),
                 ],
               ),
@@ -418,140 +429,81 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
     );
   }
 
-  TableRow _buildDirectoryRow(Map<String, dynamic> user) {
-    final List<String> pets = List<String>.from(user['pets'] ?? []);
+  TableRow _buildUserRow(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final ownerDocId = doc.id;
+    final displayId = data['ownerID'] ?? data['ownerId'] ?? 'OWN-00000';
+    final name = data['fullName'] ?? 'N/A';
+    final email = data['email'] ?? 'N/A';
+    final phone = data['phone'] ?? 'N/A';
+    final address = data['address'] ?? 'N/A';
 
     return TableRow(
       children: [
-        // 1. ID NUMBER
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14.0),
-          child: Text(
-            user['id']!,
-            style: const TextStyle(
-              color: Color(0xFF64748B),
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 18.0),
+          child: Text(displayId,
+              style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold)),
         ),
-
-        // 2. OWNER DETAILS (Full Name + Email & Phone)
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              user['ownerName']!,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: Color(0xFF0F172A),
-              ),
-            ),
+            Text(name,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF0F172A))),
             const SizedBox(height: 2),
-            Text(
-              '${user['email']} • ${user['phone']}',
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
-              overflow: TextOverflow.ellipsis,
-            ),
+            Text('$email • $phone',
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
           ],
         ),
-
-        // 3. REGISTERED PETS (Badge Chips for 1-to-Many Relationship)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: pets.isEmpty
-              ? Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
+        StreamBuilder<QuerySnapshot>(
+          stream: _firestoreService.getPetsByOwnerDocId(ownerDocId),
+          builder: (context, petSnap) {
+            final petCount = petSnap.data?.docs.length ?? 0;
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                onTap: () => _openViewPetsModal(ownerDocId, displayId, name),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text(
-                    '0 Pets Linked',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                  child: Text(
+                    '$petCount Pets Linked',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF64748B)),
                   ),
-                )
-              : Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    // Main Badge Counter
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFC7D2FE)),
-                      ),
-                      child: Text(
-                        '${pets.length} ${pets.length == 1 ? "Pet" : "Pets"}',
-                        style: const TextStyle(
-                          color: Color(0xFF312E81),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    // Mini Pet Name Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Text(
-                        pets.first,
-                        style: const TextStyle(
-                          color: Color(0xFF475569),
-                          fontSize: 10,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
                 ),
+              ),
+            );
+          },
         ),
-
-        // 4. ADDRESS
-        Text(
-          user['address']!,
-          style: const TextStyle(fontSize: 11, color: Color(0xFF475569)),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
-        ),
-
-        // 5. ACTIONS (Edit ✏️ and View Details 👁️)
+        Text(address,
+            style: const TextStyle(color: Color(0xFF475569), fontSize: 12)),
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(
-                Icons.visibility_outlined,
-                color: Color(0xFF312E81),
-                size: 18,
-              ),
-              tooltip: 'View Details',
-              onPressed: () => _showOwnerDetailsModal(user),
+              icon: const Icon(Icons.remove_red_eye_outlined,
+                  size: 18, color: Color(0xFF4F46E5)),
+              onPressed: () => _openViewPetsModal(ownerDocId, displayId, name),
+              tooltip: 'View Registered Pets',
             ),
             IconButton(
-              icon: const Icon(
-                Icons.edit_outlined,
-                color: Color(0xFF64748B),
-                size: 18,
-              ),
-              tooltip: 'Edit Owner',
-              onPressed: () {},
+              icon: const Icon(Icons.edit_outlined,
+                  size: 18, color: Color(0xFF64748B)),
+              onPressed: () => _openEditOwnerModal(ownerDocId, data),
+              tooltip: 'Edit Owner Account',
             ),
           ],
         ),
@@ -561,11 +513,328 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
 }
 
 // ==========================================
-// ADD NEW PET OWNER FORM DIALOG MODAL (REORDERED FIELDS)
+// VIEW PETS DIALOG MODAL (READ-ONLY)
+// ==========================================
+class ViewPetsDialog extends StatelessWidget {
+  final String ownerDocId;
+  final String ownerId;
+  final String ownerName;
+
+  const ViewPetsDialog({
+    super.key,
+    required this.ownerDocId,
+    required this.ownerId,
+    required this.ownerName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final FirestoreService firestoreService = FirestoreService();
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Colors.white,
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Pets of $ownerName",
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A))),
+                    const SizedBox(height: 2),
+                    Text("ID: $ownerId",
+                        style: const TextStyle(
+                            fontSize: 12, color: Color(0xFF64748B))),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close,
+                      size: 20, color: Color(0xFF64748B)),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            StreamBuilder<QuerySnapshot>(
+              stream: firestoreService.getPetsByOwnerDocId(ownerDocId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                      child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator()));
+                }
+
+                final petDocs = snapshot.data?.docs ?? [];
+
+                if (petDocs.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      children: const [
+                        Icon(Icons.pets, size: 36, color: Color(0xFF94A3B8)),
+                        SizedBox(height: 8),
+                        Text("No pets registered yet for this owner.",
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
+                      ],
+                    ),
+                  );
+                }
+
+                return Column(
+                  children: [
+                    for (var doc in petDocs) ...[
+                      Builder(builder: (context) {
+                        final pet = doc.data() as Map<String, dynamic>;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                        color: const Color(0xFFEEF2FF),
+                                        borderRadius: BorderRadius.circular(8)),
+                                    child: const Icon(Icons.pets,
+                                        size: 18, color: Color(0xFF4F46E5)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(pet['petName'] ?? 'N/A',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: Color(0xFF0F172A))),
+                                      Text(
+                                          '${pet['species']} • ${pet['breed']} (${pet['gender']})',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF64748B))),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: const Color(0xFFCBD5E1))),
+                                child: Text(pet['petId'] ?? 'PET-000',
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF475569))),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ]
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close',
+                      style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// EDIT OWNER DIALOG MODAL (PENCIL BUTTON)
+// ==========================================
+class EditOwnerDialog extends StatefulWidget {
+  final String docId;
+  final Map<String, dynamic> currentData;
+
+  const EditOwnerDialog({
+    super.key,
+    required this.docId,
+    required this.currentData,
+  });
+
+  @override
+  State<EditOwnerDialog> createState() => _EditOwnerDialogState();
+}
+
+class _EditOwnerDialogState extends State<EditOwnerDialog> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _fullNameController;
+  late TextEditingController _phoneController;
+  late TextEditingController _addressController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fullNameController =
+        TextEditingController(text: widget.currentData['fullName'] ?? '');
+    _phoneController =
+        TextEditingController(text: widget.currentData['phone'] ?? '');
+    _addressController =
+        TextEditingController(text: widget.currentData['address'] ?? '');
+  }
+
+  InputDecoration _customInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+          fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 480,
+        padding: const EdgeInsets.all(28),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                      "Edit Account: ${widget.currentData['ownerID'] ?? widget.currentData['ownerId'] ?? ''}",
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
+                  IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(context)),
+                ],
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _fullNameController,
+                decoration: _customInputDecoration('Full Name*'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _phoneController,
+                decoration: _customInputDecoration('Contact Number*'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _addressController,
+                decoration: _customInputDecoration('Complete Address*'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel',
+                          style: TextStyle(color: Color(0xFF64748B)))),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      if (_formKey.currentState!.validate()) {
+                        Navigator.pop(context, {
+                          'fullName': _fullNameController.text.trim(),
+                          'phone': _phoneController.text.trim(),
+                          'address': _addressController.text.trim(),
+                        });
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Update Account',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// ADD NEW OWNER DIALOG MODAL
 // ==========================================
 class AddNewOwnerDialog extends StatefulWidget {
   final String generatedId;
-
   const AddNewOwnerDialog({super.key, required this.generatedId});
 
   @override
@@ -574,7 +843,6 @@ class AddNewOwnerDialog extends StatefulWidget {
 
 class _AddNewOwnerDialogState extends State<AddNewOwnerDialog> {
   final _formKey = GlobalKey<FormState>();
-  bool _isSaving = false;
   bool _obscurePassword = true;
 
   late TextEditingController _idController;
@@ -589,311 +857,186 @@ class _AddNewOwnerDialogState extends State<AddNewOwnerDialog> {
     _idController = TextEditingController(text: widget.generatedId);
   }
 
-  void _saveOwnerRecord() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isSaving = true);
-
-      await Future.delayed(const Duration(milliseconds: 600));
-
-      final name = _fullNameController.text.trim();
-      final phone = _contactNumController.text.trim();
-      final address = _addressController.text.trim();
-      final password = _passwordController.text.trim();
-      final emailHandle = name.toLowerCase().replaceAll(' ', '.');
-
-      final newOwnerMap = {
-        'id': widget.generatedId,
-        'ownerName': name,
-        'email': '$emailHandle@furryfriends.com',
-        'phone': phone,
-        'address': address,
-        'password': password,
-        'pets': <String>[],
-      };
-
-      if (mounted) {
-        setState(() => _isSaving = false);
-        Navigator.pop(context, newOwnerMap);
-      }
-    }
+  InputDecoration _customInputDecoration({
+    required String label,
+    required String hintText,
+    Widget? prefixIcon,
+    Widget? suffixIcon,
+    bool readOnly = false,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+          fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+      hintText: hintText,
+      hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      filled: true,
+      fillColor: readOnly ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC),
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.white,
+      elevation: 10,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         width: 520,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.90,
-        ),
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(32),
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
+                      Text('Add New Pet Owner',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A))),
+                      SizedBox(height: 4),
                       Text(
-                        'Add New Pet Owner',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Enter client details to create a new pet owner record.',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 12,
-                        ),
-                      ),
+                          'Enter client details to create a new pet owner record.',
+                          style: TextStyle(
+                              fontSize: 12, color: Color(0xFF64748B))),
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.close,
-                      size: 20,
-                      color: Color(0xFF94A3B8),
-                    ),
                     onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close,
+                        color: Color(0xFF64748B), size: 20),
                   ),
                 ],
               ),
-              const Divider(color: Color(0xFFE2E8F0), height: 24),
-
-              // Form Body in Order: ID -> FULL NAME -> CONTACT NUMBER -> ADDRESS -> PASSWORD
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. PET OWNER ID
-                      const Text(
-                        'Pet Owner ID Number',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _idController,
-                        readOnly: true,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF64748B),
-                        ),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: const Color(0xFFE2E8F0),
-                          prefixIcon: const Icon(
-                            Icons.badge_outlined,
-                            size: 18,
-                            color: Color(0xFF64748B),
-                          ),
-                          suffixIcon: const Icon(
-                            Icons.lock_outline,
-                            size: 16,
-                            color: Color(0xFF94A3B8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFCBD5E1),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFCBD5E1),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 2. FULL NAME
-                      const Text(
-                        'Full Name*',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _fullNameController,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: _inputDecoration(
-                          hint: 'e.g., Juan Dela Cruz',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Full name is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 3. CONTACT NUMBER
-                      const Text(
-                        'Contact Number*',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _contactNumController,
-                        keyboardType: TextInputType.phone,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: _inputDecoration(hint: 'e.g., 09171234567'),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Contact number is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 4. COMPLETE ADDRESS
-                      const Text(
-                        'Complete Address*',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _addressController,
-                        maxLines: 2,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: _inputDecoration(
-                          hint: 'House No., Street, City, Province',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Complete address is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 14),
-
-                      // 5. ACCOUNT PASSWORD
-                      const Text(
-                        'Account Password*',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: _inputDecoration(
-                          hint: 'Enter account password',
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              size: 18,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Password is required';
-                          }
-                          if (value.trim().length < 6) {
-                            return 'Password must be at least 6 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _idController,
+                readOnly: true,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF334155)),
+                decoration: _customInputDecoration(
+                  label: 'Owner ID Number',
+                  hintText: 'OWN-00001',
+                  readOnly: true,
+                  prefixIcon: const Icon(Icons.badge_outlined,
+                      size: 18, color: Color(0xFF64748B)),
+                  suffixIcon: const Icon(Icons.lock_outline,
+                      size: 18, color: Color(0xFF64748B)),
                 ),
               ),
-
               const SizedBox(height: 16),
-              const Divider(color: Color(0xFFE2E8F0)),
-              const SizedBox(height: 8),
-
-              // Action Buttons
+              TextFormField(
+                controller: _fullNameController,
+                style: const TextStyle(fontSize: 13),
+                decoration: _customInputDecoration(
+                    label: 'Full Name*', hintText: 'e.g., Juan Dela Cruz'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter full name'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _contactNumController,
+                style: const TextStyle(fontSize: 13),
+                decoration: _customInputDecoration(
+                    label: 'Contact Number*', hintText: 'e.g., 09171234567'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter contact number'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _addressController,
+                style: const TextStyle(fontSize: 13),
+                decoration: _customInputDecoration(
+                    label: 'Complete Address*',
+                    hintText: 'House No., Street, City, Province'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter address'
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                style: const TextStyle(fontSize: 13),
+                decoration: _customInputDecoration(
+                  label: 'Account Password*',
+                  hintText: '••••••••',
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: 18,
+                        color: const Color(0xFF64748B)),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter password'
+                    : null,
+              ),
+              const SizedBox(height: 28),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                    ),
+                    child: const Text('Cancel',
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: _isSaving ? null : _saveOwnerRecord,
+                    onPressed: () {
+                      if (_formKey.currentState!.validate()) {
+                        Navigator.pop(context, {
+                          'id': widget.generatedId,
+                          'ownerName': _fullNameController.text.trim(),
+                          'phone': _contactNumController.text.trim(),
+                          'address': _addressController.text.trim(),
+                          'password': _passwordController.text.trim(),
+                        });
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E2235),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      backgroundColor: const Color(0xFF0F172A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 22,
-                        vertical: 14,
-                      ),
+                          horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Save Owner Record',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    child: const Text('Save Owner Record',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13)),
                   ),
                 ],
               ),
@@ -903,165 +1046,8 @@ class _AddNewOwnerDialogState extends State<AddNewOwnerDialog> {
       ),
     );
   }
-
-  InputDecoration _inputDecoration({String hint = '', Widget? suffixIcon}) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF0F172A)),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-    );
-  }
 }
 
-// ==========================================
-// SUMMARY METRIC CARDS
-// ==========================================
-class _SummaryCardsRow extends StatelessWidget {
-  const _SummaryCardsRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _metricCard(
-            icon: Icons.people_outline,
-            label: 'Total Users',
-            value: '1,284',
-            iconBg: const Color(0xFFEEF2FF),
-            iconColor: const Color(0xFF312E81),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _metricCard(
-            icon: Icons.pets_outlined,
-            label: 'Active Pets',
-            value: '3,502',
-            iconBg: const Color(0xFFEEF2FF),
-            iconColor: const Color(0xFF312E81),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Database Integrity',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      '98.2% Optimized',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: const Color(0xFF0F172A),
-                  child: const Text(
-                    '+2k',
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _metricCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color iconBg,
-    required Color iconColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: iconColor, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// TOP HEADER
-// ==========================================
 class _TopHeader extends StatelessWidget {
   const _TopHeader();
 
@@ -1069,54 +1055,36 @@ class _TopHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
       color: Colors.white,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 320,
-            height: 38,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search clinic database...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 12,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 16,
-                  color: Color(0xFF94A3B8),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                contentPadding: EdgeInsets.zero,
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          Expanded(
+            child: Container(
+              height: 40,
+              constraints: const BoxConstraints(maxWidth: 400),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const TextField(
+                decoration: InputDecoration(
+                  hintText: 'Search clinic database...',
+                  hintStyle: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  prefixIcon:
+                      Icon(Icons.search, size: 18, color: Color(0xFF94A3B8)),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
                 ),
               ),
             ),
           ),
           Row(
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.help_outline,
-                  color: Color(0xFF94A3B8),
-                  size: 20,
-                ),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.grid_view,
-                  color: Color(0xFF94A3B8),
-                  size: 20,
-                ),
-                onPressed: () {},
-              ),
+            children: const [
+              Icon(Icons.help_outline, color: Color(0xFF64748B), size: 20),
+              SizedBox(width: 16),
+              Icon(Icons.grid_view, color: Color(0xFF64748B), size: 20),
             ],
           ),
         ],
@@ -1128,19 +1096,15 @@ class _TopHeader extends StatelessWidget {
 class _TableHeader extends StatelessWidget {
   final String label;
   const _TableHeader(this.label);
-
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF94A3B8),
-        ),
-      ),
+      child: Text(label,
+          style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF94A3B8))),
     );
   }
 }

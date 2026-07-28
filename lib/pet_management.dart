@@ -1,18 +1,228 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sidebar.dart';
-import 'pet_profile.dart';
 
-class PetManagementScreen extends StatelessWidget {
+class PetManagementScreen extends StatefulWidget {
   const PetManagementScreen({super.key});
 
-  // Open Add New Pet Intake Dialog
-  void _showAddPetModal(BuildContext context) {
-    showDialog(
+  @override
+  State<PetManagementScreen> createState() => _PetManagementScreenState();
+}
+
+class _PetManagementScreenState extends State<PetManagementScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Open "Add New Pet" Dialog
+  Future<void> _openAddPetModal(int currentPetCount) async {
+    final nextPetId = 'PET-${(currentPetCount + 1).toString().padLeft(5, '0')}';
+
+    await showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (BuildContext context) {
-        return const _AddPetRegistrationDialog();
-      },
+      builder: (context) => AddPetModal(nextPetId: nextPetId),
+    );
+  }
+
+  // Open "View Pet Details" Dialog
+  void _openViewPetDetailsModal(Map<String, dynamic> pet, String ownerDocId) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          ViewPetDetailsModal(pet: pet, ownerDocId: ownerDocId),
+    );
+  }
+
+  // 2. Upgraded "Update Patient Status" Dialog (Interactive Colored Cards)
+  Future<void> _openUpdateStatusModal(
+      String petDocId, String currentStatus) async {
+    String selectedStatus = currentStatus;
+
+    final newStatus = await showDialog<String>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: 440,
+          padding: const EdgeInsets.all(28),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Update Patient Status',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A))),
+                      IconButton(
+                        icon: const Icon(Icons.close,
+                            size: 20, color: Color(0xFF64748B)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                      'Select current health or clinic status of patient.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  const SizedBox(height: 20),
+                  _buildStatusOptionCard(
+                      'Active',
+                      'Routine checkup / Outpatient',
+                      const Color(0xFFDCFCE7),
+                      const Color(0xFF15803D),
+                      selectedStatus,
+                      (val) => setModalState(() => selectedStatus = val)),
+                  _buildStatusOptionCard(
+                      'In Treatment',
+                      'Under medical care or confinement',
+                      const Color(0xFFFEF3C7),
+                      const Color(0xFFD97706),
+                      selectedStatus,
+                      (val) => setModalState(() => selectedStatus = val)),
+                  _buildStatusOptionCard(
+                      'Discharged',
+                      'Completed treatment & sent home',
+                      const Color(0xFFF1F5F9),
+                      const Color(0xFF475569),
+                      selectedStatus,
+                      (val) => setModalState(() => selectedStatus = val)),
+                  _buildStatusOptionCard(
+                      'Deceased',
+                      'Patient passed away',
+                      const Color(0xFFFEE2E2),
+                      const Color(0xFFDC2626),
+                      selectedStatus,
+                      (val) => setModalState(() => selectedStatus = val)),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel',
+                            style: TextStyle(color: Color(0xFF64748B))),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, selectedStatus),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: const Text('Save Status',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (newStatus != null && mounted) {
+      await FirebaseFirestore.instance.collection('pets').doc(petDocId).update({
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Patient status updated to $newStatus'),
+            backgroundColor: const Color(0xFF166534),
+          ),
+        );
+      }
+    }
+  }
+
+  // 3. Open "Edit Pet Details" Dialog (Clickable & Functional)
+  Future<void> _openEditPetModal(
+      String petDocId, Map<String, dynamic> currentPet) async {
+    await showDialog(
+      context: context,
+      builder: (context) =>
+          EditPetModal(petDocId: petDocId, currentPet: currentPet),
+    );
+  }
+
+  Widget _buildStatusOptionCard(String value, String subtitle, Color bgColor,
+      Color textColor, String groupVal, Function(String) onTap) {
+    final bool isSelected = value == groupVal;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: () => onTap(value),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                isSelected ? bgColor.withOpacity(0.5) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: isSelected ? textColor : const Color(0xFFE2E8F0),
+                width: isSelected ? 1.5 : 1.0),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                  isSelected
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  color: isSelected ? textColor : const Color(0xFF94A3B8),
+                  size: 20),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: isSelected
+                              ? textColor
+                              : const Color(0xFF0F172A))),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF64748B))),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -22,21 +232,18 @@ class PetManagementScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF8FAFC),
       body: Row(
         children: [
-          // Shared Navigation Sidebar
           const SidebarMenu(activeRoute: 'pet_management'),
-
-          // Main Workspace Area
           Expanded(
             child: Column(
               children: [
                 const _TopHeader(),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(28.0),
+                    padding: const EdgeInsets.all(32.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Page Header Title & Action Button
+                        // Header Title & ADD Button
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -46,53 +253,202 @@ class PetManagementScreen extends StatelessWidget {
                                 Text(
                                   'Pet Management',
                                   style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
-                                  ),
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A)),
                                 ),
                                 SizedBox(height: 4),
                                 Text(
                                   'Manage patient records, track medical status, and owner details.',
                                   style: TextStyle(
-                                    color: Color(0xFF64748B),
-                                    fontSize: 13,
-                                  ),
+                                      color: Color(0xFF64748B), fontSize: 13),
                                 ),
                               ],
                             ),
-                            ElevatedButton.icon(
-                              onPressed: () => _showAddPetModal(context),
-                              icon: const Icon(
-                                Icons.add,
-                                size: 18,
-                                color: Colors.white,
-                              ),
-                              label: const Text(
-                                'Add New Pet',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
+                            StreamBuilder<QuerySnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('pets')
+                                  .snapshots(),
+                              builder: (context, snap) {
+                                final count = snap.data?.docs.length ?? 0;
+                                return ElevatedButton.icon(
+                                  onPressed: () => _openAddPetModal(count),
+                                  icon: const Icon(Icons.add,
+                                      size: 18, color: Colors.white),
+                                  label: const Text('Add New Pet',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24, vertical: 18),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 32),
 
-                        // Registry Table Card
-                        const _PetRegistryTableCard(),
+                        // Search & Table Card
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 360,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  style: const TextStyle(fontSize: 13),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search Pet ID or Pet Owner...',
+                                    hintStyle: TextStyle(
+                                        fontSize: 12, color: Color(0xFF94A3B8)),
+                                    prefixIcon: Icon(Icons.search,
+                                        size: 18, color: Color(0xFF94A3B8)),
+                                    border: InputBorder.none,
+                                    contentPadding:
+                                        EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('pets')
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(40.0),
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  }
+
+                                  final allDocs = snapshot.data?.docs ?? [];
+
+                                  final filteredDocs = allDocs.where((doc) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    final petName = (data['petName'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final petId = (data['petId'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final ownerId = (data['ownerId'] ??
+                                            data['ownerID'] ??
+                                            '')
+                                        .toString()
+                                        .toLowerCase();
+
+                                    return petName.contains(_searchQuery) ||
+                                        petId.contains(_searchQuery) ||
+                                        ownerId.contains(_searchQuery);
+                                  }).toList();
+
+                                  return Column(
+                                    children: [
+                                      Table(
+                                        columnWidths: const {
+                                          0: FlexColumnWidth(1.2), // PET ID
+                                          1: FlexColumnWidth(2.0), // PET NAME
+                                          2: FlexColumnWidth(
+                                              2.2), // OWNER'S NAME
+                                          3: FlexColumnWidth(1.8), // BREED
+                                          4: FlexColumnWidth(1.5), // STATUS
+                                          5: FlexColumnWidth(0.8), // ACTIONS
+                                        },
+                                        defaultVerticalAlignment:
+                                            TableCellVerticalAlignment.middle,
+                                        children: [
+                                          const TableRow(
+                                            children: [
+                                              _TableHeader(
+                                                  'PET ID'), // 4. RENAMED TO PET ID
+                                              _TableHeader('PET NAME'),
+                                              _TableHeader("OWNER'S NAME"),
+                                              _TableHeader('BREED'),
+                                              _TableHeader('STATUS'),
+                                              _TableHeader('ACTIONS'),
+                                            ],
+                                          ),
+                                          for (var doc in filteredDocs)
+                                            _buildPetRow(doc),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 24),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Showing 1 to ${filteredDocs.length} of ${allDocs.length} entries',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Color(0xFF64748B)),
+                                          ),
+                                          Row(
+                                            children: [
+                                              OutlinedButton(
+                                                onPressed: null,
+                                                style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 12)),
+                                                child: const Text('Previous',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            Color(0xFF94A3B8))),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              OutlinedButton(
+                                                onPressed: null,
+                                                style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 12)),
+                                                child: const Text('Next',
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color:
+                                                            Color(0xFF94A3B8))),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -104,11 +460,1047 @@ class PetManagementScreen extends StatelessWidget {
       ),
     );
   }
+
+  TableRow _buildPetRow(QueryDocumentSnapshot doc) {
+    final pet = doc.data() as Map<String, dynamic>;
+    final petDocId = doc.id;
+    final petDisplayId = pet['petId'] ?? '#00000';
+    final petName = pet['petName'] ?? 'N/A';
+    final breed = pet['breed'] ?? 'N/A';
+    final status = pet['status'] ?? 'Active';
+    final ownerDocId = pet['ownerDocId'] ?? '';
+
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18.0),
+          child: Text(petDisplayId,
+              style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold)),
+        ),
+        Row(
+          children: [
+            const Icon(Icons.pets, size: 16, color: Color(0xFF94A3B8)),
+            const SizedBox(width: 8),
+            Text(petName,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF0F172A))),
+          ],
+        ),
+
+        FutureBuilder<DocumentSnapshot>(
+          future: ownerDocId.isNotEmpty
+              ? FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(ownerDocId.trim())
+                  .get()
+              : null,
+          builder: (context, userSnap) {
+            String ownerName = pet['ownerId'] ?? 'N/A';
+            if (userSnap.hasData && userSnap.data!.exists) {
+              final userData = userSnap.data!.data() as Map<String, dynamic>?;
+              ownerName = userData?['fullName'] ?? ownerName;
+            }
+            return Text(ownerName,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF334155)));
+          },
+        ),
+
+        Text(breed,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF475569))),
+
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _buildStatusBadge(status),
+        ),
+
+        // 1. ICONS INSIDE TRIPPLE DOTS MENU
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_horiz, color: Color(0xFF94A3B8)),
+          onSelected: (action) {
+            if (action == 'view_pet') {
+              _openViewPetDetailsModal(pet, ownerDocId);
+            } else if (action == 'update_status') {
+              _openUpdateStatusModal(petDocId, status);
+            } else if (action == 'edit_pet') {
+              _openEditPetModal(petDocId, pet);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'view_pet',
+              child: Row(
+                children: [
+                  Icon(Icons.remove_red_eye_outlined,
+                      size: 16, color: Color(0xFF4F46E5)),
+                  SizedBox(width: 10),
+                  Text('View Pet Details',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'update_status',
+              child: Row(
+                children: [
+                  Icon(Icons.published_with_changes,
+                      size: 16, color: Color(0xFF0F172A)),
+                  SizedBox(width: 10),
+                  Text('Update Patient Status',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'edit_pet',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_outlined, size: 16, color: Color(0xFF64748B)),
+                  SizedBox(width: 10),
+                  Text('Edit Pet Details',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF0F172A))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color bgColor;
+    Color textColor;
+
+    switch (status) {
+      case 'In Treatment':
+        bgColor = const Color(0xFFFEF3C7);
+        textColor = const Color(0xFFD97706);
+        break;
+      case 'Discharged':
+        bgColor = const Color(0xFFF1F5F9);
+        textColor = const Color(0xFF475569);
+        break;
+      case 'Deceased':
+        bgColor = const Color(0xFFFEE2E2);
+        textColor = const Color(0xFFDC2626);
+        break;
+      case 'Active':
+      default:
+        bgColor = const Color(0xFFDCFCE7);
+        textColor = const Color(0xFF15803D);
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
+      ),
+    );
+  }
 }
 
 // ==========================================
-// TOP HEADER
+// 5. REDESIGNED VIEW PET DETAILS MODAL (HERO)
 // ==========================================
+class ViewPetDetailsModal extends StatelessWidget {
+  final Map<String, dynamic> pet;
+  final String ownerDocId;
+
+  const ViewPetDetailsModal({
+    super.key,
+    required this.pet,
+    required this.ownerDocId,
+  });
+
+  Widget _buildInfoCard(String label, String value, IconData icon,
+      {Color? accentColor}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (accentColor ?? const Color(0xFF4F46E5)).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon,
+                size: 16, color: accentColor ?? const Color(0xFF4F46E5)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF94A3B8),
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(value.isNotEmpty ? value : 'N/A',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A)),
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final petName = pet['petName'] ?? 'N/A';
+    final petId = pet['petId'] ?? '#00000';
+    final species = pet['species'] ?? 'N/A';
+    final breed = pet['breed'] ?? 'N/A';
+    final gender = pet['gender'] ?? 'N/A';
+    final birthDate = pet['birthDate'] ?? 'N/A';
+    final markings = pet['petColorAndMarkings'] ?? 'None specified';
+    final status = pet['status'] ?? 'Active';
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Hero Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.pets,
+                            size: 26, color: Colors.white),
+                      ),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(petName,
+                              style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white)),
+                          const SizedBox(height: 2),
+                          Text('Pet ID: $petId',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Color(0xFF94A3B8))),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close,
+                        size: 20, color: Colors.white70),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Owner Details Card
+            FutureBuilder<DocumentSnapshot>(
+              future: ownerDocId.isNotEmpty
+                  ? FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(ownerDocId.trim())
+                      .get()
+                  : null,
+              builder: (context, userSnap) {
+                String ownerName = pet['ownerId'] ?? 'N/A';
+                String phone = 'N/A';
+                if (userSnap.hasData && userSnap.data!.exists) {
+                  final userData =
+                      userSnap.data!.data() as Map<String, dynamic>?;
+                  ownerName = userData?['fullName'] ?? ownerName;
+                  phone = userData?['phone'] ?? phone;
+                }
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_pin_outlined,
+                          color: Color(0xFF4F46E5), size: 24),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('REGISTERED OWNER',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4F46E5))),
+                          Text('$ownerName (${pet['ownerId'] ?? ''})',
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A))),
+                          Text('Contact: $phone',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Color(0xFF64748B))),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Details Grid
+            Row(
+              children: [
+                Expanded(
+                    child: _buildInfoCard(
+                        "SPECIES", species, Icons.category_outlined)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _buildInfoCard(
+                        "BREED", breed, Icons.merge_type_outlined)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                    child: _buildInfoCard("GENDER", gender, Icons.wc_outlined)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: _buildInfoCard(
+                        "DATE OF BIRTH", birthDate, Icons.cake_outlined)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildInfoCard(
+                "COLOR & MARKINGS", markings, Icons.palette_outlined),
+            const SizedBox(height: 10),
+            _buildInfoCard("PATIENT STATUS", status, Icons.info_outline,
+                accentColor: const Color(0xFF166534)),
+
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Close Profile',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 3. EDIT PET DETAILS MODAL
+// ==========================================
+class EditPetModal extends StatefulWidget {
+  final String petDocId;
+  final Map<String, dynamic> currentPet;
+
+  const EditPetModal({
+    super.key,
+    required this.petDocId,
+    required this.currentPet,
+  });
+
+  @override
+  State<EditPetModal> createState() => _EditPetModalState();
+}
+
+class _EditPetModalState extends State<EditPetModal> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _petNameController;
+  late TextEditingController _breedController;
+  late TextEditingController _birthDateController;
+  late TextEditingController _markingsController;
+
+  late String _species;
+  late String _gender;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _petNameController =
+        TextEditingController(text: widget.currentPet['petName'] ?? '');
+    _breedController =
+        TextEditingController(text: widget.currentPet['breed'] ?? '');
+    _birthDateController =
+        TextEditingController(text: widget.currentPet['birthDate'] ?? '');
+    _markingsController = TextEditingController(
+        text: widget.currentPet['petColorAndMarkings'] ?? '');
+
+    _species = widget.currentPet['species'] ?? 'Dog';
+    _gender = widget.currentPet['gender'] ?? 'Male';
+  }
+
+  InputDecoration _inputDeco(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+          fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
+    );
+  }
+
+  void _updatePetInFirestore() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() => _isSaving = true);
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('pets')
+            .doc(widget.petDocId)
+            .update({
+          'petName': _petNameController.text.trim(),
+          'species': _species,
+          'breed': _breedController.text.trim(),
+          'birthDate': _birthDateController.text.trim(),
+          'gender': _gender,
+          'petColorAndMarkings': _markingsController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pet details updated successfully!'),
+              backgroundColor: Color(0xFF166534),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error updating pet: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(28),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("Edit Pet: ${widget.currentPet['petId'] ?? ''}",
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
+                  IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(context)),
+                ],
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                controller: _petNameController,
+                decoration: _inputDeco('Pet Name*'),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _species,
+                      decoration: _inputDeco('Species*'),
+                      items: ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other']
+                          .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (val) => setState(() => _species = val!),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _gender,
+                      decoration: _inputDeco('Gender*'),
+                      items: ['Male', 'Female']
+                          .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (val) => setState(() => _gender = val!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _breedController,
+                      decoration: _inputDeco('Breed*'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _birthDateController,
+                      decoration: _inputDeco('Date of Birth*'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _markingsController,
+                decoration: _inputDeco('Color & Markings'),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel',
+                          style: TextStyle(color: Color(0xFF64748B)))),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _isSaving ? null : _updatePetInFirestore,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Update Pet Record',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// ADD NEW PET MODAL (AUTOCOMPLETE)
+// ==========================================
+class AddPetModal extends StatefulWidget {
+  final String nextPetId;
+  const AddPetModal({super.key, required this.nextPetId});
+
+  @override
+  State<AddPetModal> createState() => _AddPetModalState();
+}
+
+class _AddPetModalState extends State<AddPetModal> {
+  final _formKey = GlobalKey<FormState>();
+
+  String? _selectedOwnerDocId;
+  String? _selectedOwnerId;
+  String? _selectedOwnerName;
+
+  final TextEditingController _petNameController = TextEditingController();
+  final TextEditingController _breedController = TextEditingController();
+  final TextEditingController _birthDateController = TextEditingController();
+  final TextEditingController _markingsController = TextEditingController();
+
+  String _species = 'Dog';
+  String _gender = 'Male';
+  bool _isSaving = false;
+
+  InputDecoration _inputDeco(String label, {String? hint, Widget? prefixIcon}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: prefixIcon,
+      labelStyle: const TextStyle(
+          fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+      hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+      floatingLabelBehavior: FloatingLabelBehavior.always,
+      filled: true,
+      fillColor: const Color(0xFFF8FAFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
+    );
+  }
+
+  void _savePetToFirestore() async {
+    if (_formKey.currentState!.validate()) {
+      if (_selectedOwnerDocId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Please select a Pet Owner first!'),
+              backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      setState(() => _isSaving = true);
+
+      try {
+        await FirebaseFirestore.instance.collection('pets').add({
+          'petId': widget.nextPetId,
+          'petName': _petNameController.text.trim(),
+          'species': _species,
+          'breed': _breedController.text.trim(),
+          'birthDate': _birthDateController.text.trim(),
+          'gender': _gender,
+          'petColorAndMarkings': _markingsController.text.trim(),
+          'ownerDocId': _selectedOwnerDocId,
+          'ownerId': _selectedOwnerId,
+          'status': 'Active',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Successfully registered ${_petNameController.text.trim()}!'),
+              backgroundColor: const Color(0xFF166534),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isSaving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error saving pet: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 520,
+        padding: const EdgeInsets.all(32),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Add New Pet',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A))),
+                      const SizedBox(height: 4),
+                      Text('Assigned Pet ID: ${widget.nextPetId}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF64748B))),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close,
+                        size: 20, color: Color(0xFF64748B)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_selectedOwnerDocId != null) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFCBD5E1)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person_pin_outlined,
+                              color: Color(0xFF4F46E5), size: 22),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_selectedOwnerName ?? '',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: Color(0xFF0F172A))),
+                              Text('ID: ${_selectedOwnerId ?? ''}',
+                                  style: const TextStyle(
+                                      fontSize: 11, color: Color(0xFF64748B))),
+                            ],
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedOwnerDocId = null;
+                            _selectedOwnerId = null;
+                            _selectedOwnerName = null;
+                          });
+                        },
+                        child: const Text('Change Owner',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF4F46E5),
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .snapshots(),
+                  builder: (context, userSnap) {
+                    final users = userSnap.data?.docs ?? [];
+
+                    return Autocomplete<QueryDocumentSnapshot>(
+                      displayStringForOption: (doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final name = data['fullName'] ?? '';
+                        final id = data['ownerID'] ?? data['ownerId'] ?? '';
+                        return '$name ($id)';
+                      },
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.trim().isEmpty) {
+                          return const Iterable<QueryDocumentSnapshot>.empty();
+                        }
+                        final query = textEditingValue.text.toLowerCase();
+                        return users.where((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final name =
+                              (data['fullName'] ?? '').toString().toLowerCase();
+                          final id = (data['ownerID'] ?? data['ownerId'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                          final phone =
+                              (data['phone'] ?? '').toString().toLowerCase();
+                          return name.contains(query) ||
+                              id.contains(query) ||
+                              phone.contains(query);
+                        });
+                      },
+                      onSelected: (doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        setState(() {
+                          _selectedOwnerDocId = doc.id;
+                          _selectedOwnerId =
+                              data['ownerID'] ?? data['ownerId'] ?? '';
+                          _selectedOwnerName = data['fullName'] ?? '';
+                        });
+                      },
+                      fieldViewBuilder: (context, textEditingController,
+                          focusNode, onFieldSubmitted) {
+                        return TextFormField(
+                          controller: textEditingController,
+                          focusNode: focusNode,
+                          decoration: _inputDeco(
+                            'Search Pet Owner*',
+                            hint: 'Type Owner Name or Owner ID...',
+                            prefixIcon: const Icon(Icons.search,
+                                size: 18, color: Color(0xFF94A3B8)),
+                          ),
+                          validator: (v) => _selectedOwnerDocId == null
+                              ? 'Please select a pet owner'
+                              : null,
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 8,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 456,
+                              constraints: const BoxConstraints(maxHeight: 180),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border:
+                                    Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: ListView.separated(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                separatorBuilder: (context, index) =>
+                                    const Divider(
+                                        height: 1, color: Color(0xFFF1F5F9)),
+                                itemBuilder: (BuildContext context, int index) {
+                                  final doc = options.elementAt(index);
+                                  final data =
+                                      doc.data() as Map<String, dynamic>;
+                                  final name = data['fullName'] ?? 'Unknown';
+                                  final ownerId = data['ownerID'] ??
+                                      data['ownerId'] ??
+                                      'OWN-00000';
+                                  final phone = data['phone'] ?? '';
+
+                                  return ListTile(
+                                    dense: true,
+                                    title: Text(name,
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0F172A))),
+                                    subtitle: Text('$ownerId • $phone',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFF64748B))),
+                                    onTap: () => onSelected(doc),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _petNameController,
+                decoration: _inputDeco('Pet Name*', hint: 'e.g., Mokang'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Please enter pet name'
+                    : null,
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _species,
+                      decoration: _inputDeco('Species*'),
+                      items: ['Dog', 'Cat', 'Bird', 'Rabbit', 'Other']
+                          .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (val) => setState(() => _species = val!),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _gender,
+                      decoration: _inputDeco('Gender*'),
+                      items: ['Male', 'Female']
+                          .map(
+                              (e) => DropdownMenuItem(value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (val) => setState(() => _gender = val!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _breedController,
+                      decoration: _inputDeco('Breed*', hint: 'e.g., Shih Tzu'),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Please enter breed'
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _birthDateController,
+                      decoration:
+                          _inputDeco('Date of Birth*', hint: 'YYYY-MM-DD'),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Please enter date of birth'
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _markingsController,
+                decoration: _inputDeco('Color & Markings',
+                    hint: 'e.g., Brown with white paws'),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel',
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _isSaving ? null : _savePetToFirestore,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Register Pet Record',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TopHeader extends StatelessWidget {
   const _TopHeader();
 
@@ -116,1393 +1508,41 @@ class _TopHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
       color: Colors.white,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          IconButton(
-            icon: const Icon(
-              Icons.help_outline,
-              color: Color(0xFF94A3B8),
-              size: 20,
-            ),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.grid_view,
-              color: Color(0xFF94A3B8),
-              size: 20,
-            ),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 12),
-          Row(
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: const [
-                  Text(
-                    'Admin Profile',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                  Text(
-                    'Clinic Manager',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              const CircleAvatar(
-                radius: 16,
-                backgroundColor: Color(0xFFE2E8F0),
-                child: Icon(Icons.person, color: Color(0xFF64748B), size: 18),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// PET REGISTRY TABLE CARD
-// ==========================================
-class _PetRegistryTableCard extends StatelessWidget {
-  const _PetRegistryTableCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // Table Search Bar
-          Row(
-            children: [
-              SizedBox(
-                width: 300,
-                height: 40,
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search Pet ID or Pet Owner',
-                    hintStyle: const TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 12,
-                    ),
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      size: 16,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    contentPadding: EdgeInsets.zero,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF0F172A)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Custom Data Table
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(1.2),
-              1: FlexColumnWidth(1.8),
-              2: FlexColumnWidth(1.8),
-              3: FlexColumnWidth(1.5),
-              4: FlexColumnWidth(1.2),
-              5: FlexColumnWidth(0.6),
-            },
-            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-            children: [
-              const TableRow(
-                children: [
-                  _TableHeader('ID NUMBER'),
-                  _TableHeader('PET NAME'),
-                  _TableHeader('OWNER\'S NAME'),
-                  _TableHeader('BREED'),
-                  _TableHeader('STATUS'),
-                  _TableHeader('ACTIONS'),
-                ],
-              ),
-              _buildPetRow(
-                context,
-                '#00001',
-                'Ming Ming Agravante',
-                'Junexene Agravante',
-                'Aspin',
-                'Active',
-                const Color(0xFFDCFCE7),
-                const Color(0xFF166534),
-              ),
-              _buildPetRow(
-                context,
-                '#00002',
-                'Cooper',
-                'Sarah Jenkins',
-                'Beagle',
-                'In Treatment',
-                const Color(0xFFFEF3C7),
-                const Color(0xFFD97706),
-              ),
-              _buildPetRow(
-                context,
-                '#00003',
-                'Luna',
-                'Michael Chen',
-                'Maine Coon',
-                'Discharged',
-                const Color(0xFFF1F5F9),
-                const Color(0xFF64748B),
-              ),
-              _buildPetRow(
-                context,
-                '#00004',
-                'Max',
-                'Emily Rodriguez',
-                'French Bulldog',
-                'Active',
-                const Color(0xFFDCFCE7),
-                const Color(0xFF166534),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Pagination Footer
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Showing 1 to 4 of 12 entries',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-              ),
-              Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text(
-                      'Previous',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    child: const Text(
-                      'Next',
-                      style: TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  TableRow _buildPetRow(
-    BuildContext context,
-    String id,
-    String petName,
-    String owner,
-    String breed,
-    String status,
-    Color bg,
-    Color fg,
-  ) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14.0),
-          child: Text(
-            id,
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-          ),
-        ),
-        InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    PetProfileScreen(petName: petName, petId: id),
-              ),
-            );
-          },
-          child: Row(
-            children: [
-              const CircleAvatar(
-                radius: 12,
-                backgroundColor: Color(0xFFF1F5F9),
-                child: Icon(Icons.person, size: 14, color: Color(0xFF94A3B8)),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                petName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Text(
-          owner,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-        ),
-        Text(
-          breed,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              status,
+          const Text('Smart Vet Care Portal',
               style: TextStyle(
-                color: fg,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-
-        // TRIPLE DOTS ACTION MENU (PET MANAGEMENT)
-        _PetActionsMenu(petName: petName, petId: id),
-      ],
-    );
-  }
-}
-
-// ==========================================
-// PET MANAGEMENT TRIPLE DOTS ACTION MENU
-// ==========================================
-class _PetActionsMenu extends StatelessWidget {
-  final String petName;
-  final String petId;
-
-  const _PetActionsMenu({required this.petName, required this.petId});
-
-  void _handleAction(BuildContext context, String action) {
-    switch (action) {
-      case 'view_profile':
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                PetProfileScreen(petName: petName, petId: petId),
-          ),
-        );
-        break;
-      case 'edit_pet':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Editing details for $petName ($petId)...')),
-        );
-        break;
-      case 'update_status':
-        _showUpdateStatusDialog(context);
-        break;
-      case 'book_appointment':
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Opening Appointment Booking for $petName...'),
-            backgroundColor: const Color(0xFF166534),
-          ),
-        );
-        break;
-      case 'add_clinical_note':
-        _showAddClinicalNoteDialog(context);
-        break;
-      case 'archive_delete':
-        _showArchiveDeleteDialog(context);
-        break;
-    }
-  }
-
-  // UPDATE PATIENT STATUS DIALOG
-  void _showUpdateStatusDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          title: Text(
-            'Update Status: $petName',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                dense: true,
-                leading: const Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.green,
-                  size: 18,
-                ),
-                title: const Text('Active', style: TextStyle(fontSize: 12)),
-                onTap: () => Navigator.pop(context),
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(
-                  Icons.local_hospital_outlined,
-                  color: Colors.orange,
-                  size: 18,
-                ),
-                title: const Text(
-                  'In Treatment',
-                  style: TextStyle(fontSize: 12),
-                ),
-                onTap: () => Navigator.pop(context),
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(
-                  Icons.home_outlined,
-                  color: Colors.blue,
-                  size: 18,
-                ),
-                title: const Text('Discharged', style: TextStyle(fontSize: 12)),
-                onTap: () => Navigator.pop(context),
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(
-                  Icons.remove_circle_outline,
-                  color: Colors.grey,
-                  size: 18,
-                ),
-                title: const Text(
-                  'Deceased / Inactive',
-                  style: TextStyle(fontSize: 12),
-                ),
-                onTap: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ADD CLINICAL NOTE / PRESCRIPTION DIALOG
-  void _showAddClinicalNoteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          title: Text(
-            'Add Clinical Note / Prescription ($petName)',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Diagnosis / Medical Findings',
-                style: TextStyle(
-                  fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF475569),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const TextField(
-                decoration: InputDecoration(
-                  hintText: 'Enter clinical observations...',
-                  hintStyle: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(10),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Prescribed Medication / Treatment Plan',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF475569),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const TextField(
-                maxLines: 2,
-                decoration: InputDecoration(
-                  hintText: 'Enter dosage and instructions...',
-                  hintStyle: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(10),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Clinical note saved for $petName!'),
-                    backgroundColor: const Color(0xFF166534),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-              ),
-              child: const Text(
-                'Save Record',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ARCHIVE / DELETE DIALOG
-  void _showArchiveDeleteDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          title: const Text(
-            'Archive or Delete Record',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-          ),
-          content: Text(
-            'Are you sure you want to archive or remove $petName ($petId) from active management?',
-            style: const TextStyle(fontSize: 12),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$petName ($petId) record archived.')),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-              ),
-              child: const Text(
-                'Archive / Delete',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_horiz, color: Color(0xFF94A3B8), size: 18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.white,
-      elevation: 4,
-      onSelected: (String value) => _handleAction(context, value),
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-        // 1. View Pet Profile / Medical History
-        PopupMenuItem<String>(
-          value: 'view_profile',
-          child: Row(
+                  fontSize: 16,
+                  color: Color(0xFF0F172A))),
+          Row(
             children: const [
-              Icon(
-                Icons.assignment_ind_outlined,
-                size: 16,
-                color: Color(0xFF0F172A),
-              ),
-              SizedBox(width: 10),
-              Text(
-                'View Pet Profile / Medical History',
-                style: TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-              ),
+              Icon(Icons.help_outline, color: Color(0xFF64748B), size: 20),
+              SizedBox(width: 16),
+              Icon(Icons.grid_view, color: Color(0xFF64748B), size: 20),
             ],
           ),
-        ),
-
-        // 2. Edit Pet Details
-        PopupMenuItem<String>(
-          value: 'edit_pet',
-          child: Row(
-            children: const [
-              Icon(Icons.edit_outlined, size: 16, color: Color(0xFF475569)),
-              SizedBox(width: 10),
-              Text(
-                'Edit Pet Details',
-                style: TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-              ),
-            ],
-          ),
-        ),
-
-        // 3. Update Patient Status
-        PopupMenuItem<String>(
-          value: 'update_status',
-          child: Row(
-            children: const [
-              Icon(Icons.sync_alt, size: 16, color: Color(0xFF3B82F6)),
-              SizedBox(width: 10),
-              Text(
-                'Update Patient Status',
-                style: TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-              ),
-            ],
-          ),
-        ),
-
-        // 4. Book Appointment
-        PopupMenuItem<String>(
-          value: 'book_appointment',
-          child: Row(
-            children: const [
-              Icon(
-                Icons.calendar_month_outlined,
-                size: 16,
-                color: Color(0xFF166534),
-              ),
-              SizedBox(width: 10),
-              Text(
-                'Book Appointment',
-                style: TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-              ),
-            ],
-          ),
-        ),
-
-        // 5. Add Clinical Note / Prescription
-        PopupMenuItem<String>(
-          value: 'add_clinical_note',
-          child: Row(
-            children: const [
-              Icon(Icons.note_add_outlined, size: 16, color: Color(0xFFD97706)),
-              SizedBox(width: 10),
-              Text(
-                'Add Clinical Note / Prescription',
-                style: TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
-              ),
-            ],
-          ),
-        ),
-
-        const PopupMenuDivider(height: 1),
-
-        // 6. Archive / Delete Record
-        PopupMenuItem<String>(
-          value: 'archive_delete',
-          child: Row(
-            children: const [
-              Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
-              SizedBox(width: 10),
-              Text(
-                'Archive / Delete Record',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ==========================================
-// ADD PET REGISTRATION DIALOG
-// ==========================================
-class _AddPetRegistrationDialog extends StatefulWidget {
-  const _AddPetRegistrationDialog();
-
-  @override
-  State<_AddPetRegistrationDialog> createState() =>
-      _AddPetRegistrationDialogState();
-}
-
-class _AddPetRegistrationDialogState extends State<_AddPetRegistrationDialog> {
-  String _ownerType = 'New Owner';
-
-  final TextEditingController _ownerIdController = TextEditingController(
-    text: 'OWNER-2026-8941',
-  );
-  final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _contactNumController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
-
-  final TextEditingController _petNameController = TextEditingController();
-  final TextEditingController _speciesBreedController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-  String _gender = 'Male';
-  String _spayedNeuteredStatus = 'Not Neutered / Spayed';
-
-  void _openOwnerLookupModal(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return _OwnerLookupDialog(
-          onSelectOwner: (ownerId, name, phone, address) {
-            setState(() {
-              _ownerIdController.text = ownerId;
-              _fullNameController.text = name;
-              _contactNumController.text = phone;
-              _addressController.text = address;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Selected Owner: $name ($ownerId)'),
-                backgroundColor: const Color(0xFF166534),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: Colors.white,
-      child: Container(
-        width: 580,
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.88,
-        ),
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'New Pet Patient Intake',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Register a new pet patient and manage owner profiles.',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.close,
-                    size: 20,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const Divider(color: Color(0xFFE2E8F0), height: 24),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader(
-                      Icons.assignment_ind_outlined,
-                      '1. Owner Registration Status',
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _ownerType = 'New Owner';
-                                _ownerIdController.text = 'OWNER-2026-8941';
-                                _fullNameController.clear();
-                                _contactNumController.clear();
-                                _addressController.clear();
-                              });
-                            },
-                            child: Row(
-                              children: [
-                                Radio<String>(
-                                  value: 'New Owner',
-                                  groupValue: _ownerType,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _ownerType = v!;
-                                      _ownerIdController.text =
-                                          'OWNER-2026-8941';
-                                    });
-                                  },
-                                ),
-                                const Text(
-                                  'New Owner',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _ownerType = 'Existing Owner';
-                                _ownerIdController.clear();
-                              });
-                            },
-                            child: Row(
-                              children: [
-                                Radio<String>(
-                                  value: 'Existing Owner',
-                                  groupValue: _ownerType,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _ownerType = v!;
-                                      _ownerIdController.clear();
-                                    });
-                                  },
-                                ),
-                                const Text(
-                                  'Existing Owner',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (_ownerType == 'New Owner') ...[
-                      _buildTextField(
-                        _ownerIdController,
-                        'Generated Unique Owner ID (Auto-Assigned)',
-                        'OWNER-2026-8941',
-                        isReadOnly: true,
-                      ),
-                    ] else ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: _buildTextField(
-                              _ownerIdController,
-                              'Search Owner ID Number*',
-                              'e.g., OWNER-2025-1042',
-                              isReadOnly: true,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: () => _openOwnerLookupModal(context),
-                            icon: const Icon(
-                              Icons.search,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            label: const Text(
-                              'Lookup Directory',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    _buildSectionHeader(
-                      Icons.person_outline,
-                      '2. Pet Owner Details',
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTextField(
-                      _fullNameController,
-                      'Full Name*',
-                      'e.g., Juan Dela Cruz',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildTextField(
-                      _contactNumController,
-                      'Contact Number*',
-                      'e.g., 09171234567',
-                      isNumber: true,
-                    ),
-                    const SizedBox(height: 10),
-                    _buildTextField(
-                      _addressController,
-                      'Residential Address*',
-                      'e.g., Street, City, Province',
-                    ),
-                    const SizedBox(height: 20),
-                    _buildSectionHeader(Icons.pets, '3. Pet Information'),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            _petNameController,
-                            'Pet Name*',
-                            'e.g., Milo',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildTextField(
-                            _speciesBreedController,
-                            'Species & Breed*',
-                            'e.g., Dog / Golden Retriever',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            _ageController,
-                            'Age or Date of Birth*',
-                            'e.g., 2 Years 4 Months',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Gender*',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF475569),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              DropdownButtonFormField<String>(
-                                value: _gender,
-                                decoration: _inputDecoration(),
-                                items: ['Male', 'Female']
-                                    .map(
-                                      (e) => DropdownMenuItem(
-                                        value: e,
-                                        child: Text(
-                                          e,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) => setState(() => _gender = v!),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Neutered or Spayed Status*',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    DropdownButtonFormField<String>(
-                      value: _spayedNeuteredStatus,
-                      decoration: _inputDecoration(),
-                      items: ['Neutered / Spayed', 'Not Neutered / Spayed']
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e,
-                              child: Text(
-                                e,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _spayedNeuteredStatus = v!),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Divider(color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Successfully registered ${_petNameController.text.isEmpty ? "Pet" : _petNameController.text}!',
-                        ),
-                        backgroundColor: const Color(0xFF166534),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                  ),
-                  child: const Text(
-                    'Save & Register Pet',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(IconData icon, String title) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: const Color(0xFF312E81)),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF312E81),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label,
-    String hint, {
-    bool isNumber = false,
-    bool isReadOnly = false,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF475569),
-          ),
-        ),
-        const SizedBox(height: 4),
-        TextField(
-          controller: controller,
-          readOnly: isReadOnly,
-          keyboardType: isNumber ? TextInputType.phone : TextInputType.text,
-          style: TextStyle(
-            fontSize: 12,
-            color: isReadOnly
-                ? const Color(0xFF64748B)
-                : const Color(0xFF0F172A),
-          ),
-          decoration: _inputDecoration(hint: hint, isReadOnly: isReadOnly),
-        ),
-      ],
-    );
-  }
-
-  InputDecoration _inputDecoration({
-    String hint = '',
-    bool isReadOnly = false,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-      filled: true,
-      fillColor: isReadOnly ? const Color(0xFFE2E8F0) : const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF0F172A)),
+        ],
       ),
     );
   }
 }
 
-// ==========================================
-// OWNER LOOKUP SEARCH DIALOG
-// ==========================================
-class _OwnerLookupDialog extends StatefulWidget {
-  final Function(String id, String name, String phone, String address)
-  onSelectOwner;
-
-  const _OwnerLookupDialog({required this.onSelectOwner});
-
-  @override
-  State<_OwnerLookupDialog> createState() => _OwnerLookupDialogState();
-}
-
-class _OwnerLookupDialogState extends State<_OwnerLookupDialog> {
-  String _searchQuery = '';
-
-  final List<Map<String, String>> _ownerDatabase = [
-    {
-      'id': 'OWNER-2025-0012',
-      'name': 'Sarah Jenkins',
-      'phone': '+63 917 123 4567',
-      'address': 'Quezon City, Metro Manila',
-    },
-    {
-      'id': 'OWNER-2025-0045',
-      'name': 'Junexene Agravante',
-      'phone': '+63 918 987 6543',
-      'address': 'Pasig City, Metro Manila',
-    },
-    {
-      'id': 'OWNER-2025-0102',
-      'name': 'Michael Chen',
-      'phone': '+63 920 333 4444',
-      'address': 'Mandaluyong City, Metro Manila',
-    },
-    {
-      'id': 'OWNER-2025-0189',
-      'name': 'Emily Rodriguez',
-      'phone': '+63 915 555 7788',
-      'address': 'Makati City, Metro Manila',
-    },
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredOwners = _ownerDatabase.where((owner) {
-      final q = _searchQuery.toLowerCase();
-      return owner['id']!.toLowerCase().contains(q) ||
-          owner['name']!.toLowerCase().contains(q) ||
-          owner['phone']!.toLowerCase().contains(q);
-    }).toList();
-
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      backgroundColor: Colors.white,
-      child: Container(
-        width: 650,
-        height: 500,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.search, size: 20, color: Color(0xFF0F172A)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Select Existing Owner',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.close,
-                    size: 20,
-                    color: Color(0xFF94A3B8),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: InputDecoration(
-                hintText: 'Search by Owner ID, Name, or Phone Number...',
-                hintStyle: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontSize: 12,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  size: 18,
-                  color: Color(0xFF94A3B8),
-                ),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFF0F172A)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Table(
-                  columnWidths: const {
-                    0: FlexColumnWidth(1.5),
-                    1: FlexColumnWidth(1.8),
-                    2: FlexColumnWidth(1.5),
-                    3: FlexColumnWidth(1.0),
-                  },
-                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                  children: [
-                    const TableRow(
-                      children: [
-                        _TableHeader('OWNER ID'),
-                        _TableHeader('FULL NAME'),
-                        _TableHeader('PHONE'),
-                        _TableHeader('ACTION'),
-                      ],
-                    ),
-                    for (var owner in filteredOwners)
-                      TableRow(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10.0),
-                            child: Text(
-                              owner['id']!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF475569),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                owner['name']!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              Text(
-                                owner['address']!,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xFF94A3B8),
-                                ),
-                              ),
-                            ],
-                          ),
-                          Text(
-                            owner['phone']!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () {
-                              widget.onSelectOwner(
-                                owner['id']!,
-                                owner['name']!,
-                                owner['phone']!,
-                                owner['address']!,
-                              );
-                              Navigator.pop(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                            ),
-                            child: const Text(
-                              'Select',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ==========================================
-// TABLE HEADER HELPER
-// ==========================================
 class _TableHeader extends StatelessWidget {
   final String label;
   const _TableHeader(this.label);
-
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: Color(0xFF94A3B8),
-        ),
-      ),
+      child: Text(label,
+          style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF94A3B8))),
     );
   }
 }
