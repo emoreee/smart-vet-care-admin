@@ -26,7 +26,7 @@ class SidebarMenu extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.swap_horiz, size: 36, color: Color(0xFF0F172A)),
+              const Icon(Icons.swap_horiz, size: 36, color: Color(0xFF669BBC)),
               const SizedBox(height: 12),
               const Text('Switch Role / Portal',
                   style: TextStyle(
@@ -93,7 +93,7 @@ class SidebarMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 250, // Standardized exact width across all pages
-      color: const Color(0xFF0F172A), // Dark Navy Blue
+      color: const Color(0xFF14213d), // Dark Navy Blue
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,9 +140,9 @@ class SidebarMenu extends StatelessWidget {
             context,
             icon: Icons.grid_view_rounded,
             title: 'Dashboard',
-            isActive: activeRoute == 'dashboard',
+            isActive: activeRoute == '/dashboard' || activeRoute == 'dashboard',
             onTap: () {
-              if (activeRoute != 'dashboard') {
+              if (activeRoute != '/dashboard' && activeRoute != 'dashboard') {
                 Navigator.pushReplacement(
                   context,
                   PageRouteBuilder(
@@ -160,7 +160,8 @@ class SidebarMenu extends StatelessWidget {
             context,
             icon: Icons.pets_outlined,
             title: 'Pet Management',
-            isActive: activeRoute == 'pet_management',
+            isActive: activeRoute == '/pet_management' ||
+                activeRoute == 'pet_management',
             onTap: () {
               if (activeRoute != 'pet_management') {
                 Navigator.pushReplacement(
@@ -318,8 +319,10 @@ class SidebarMenu extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF1E293B) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: isActive
+            ? const Color(0xFFE5E5E5).withOpacity(0.20)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
         dense: true,

@@ -18,7 +18,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       body: Row(
         children: [
-          // Sidebar Component
+          // Sidebar Menu Component
           const SidebarMenu(activeRoute: '/dashboard'),
 
           // Main Admin Content Area
@@ -290,7 +290,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // DYNAMIC PATIENT'S DEMOGRAPHICS FROM FIRESTORE 'PETS' COLLECTION
+  // DYNAMIC PATIENT'S DEMOGRAPHICS WITH MULTI-COLOR DONUT CHART
   Widget _buildDemographicsCard() {
     return Container(
       padding: const EdgeInsets.all(24.0),
@@ -305,11 +305,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
-              Text('Patient\'s Demographics',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A))),
+              Text(
+                'Patient\'s Demographics',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A)),
+              ),
               Icon(Icons.info_outline, size: 18, color: Color(0xFF94A3B8)),
             ],
           ),
@@ -361,11 +363,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         SizedBox(
                           width: 140,
                           height: 140,
-                          child: CircularProgressIndicator(
-                            value: totalPets > 0 ? (dogs / totalPets) : 0,
-                            strokeWidth: 16,
-                            backgroundColor: const Color(0xFF334155),
-                            color: const Color(0xFFEF4444),
+                          child: CustomPaint(
+                            painter: _DonutChartPainter(
+                              dogsPct: dogsPct,
+                              catsPct: catsPct,
+                              othersPct: othersPct,
+                            ),
                           ),
                         ),
                         Column(
@@ -388,19 +391,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                   const SizedBox(height: 24),
                   _buildDemographicRow(
-                      color: const Color(0xFF334155),
-                      label: 'Dogs',
-                      percentage: '${dogsPct.toStringAsFixed(1)}%'),
+                    color: const Color(0xFF0284C7), // BLUE
+                    label: 'Dogs',
+                    percentage: '${dogsPct.toStringAsFixed(1)}%',
+                  ),
                   const SizedBox(height: 8),
                   _buildDemographicRow(
-                      color: const Color(0xFF94A3B8),
-                      label: 'Cats',
-                      percentage: '${catsPct.toStringAsFixed(1)}%'),
+                    color: const Color(0xFFF97316), // ORANGE
+                    label: 'Cats',
+                    percentage: '${catsPct.toStringAsFixed(1)}%',
+                  ),
                   const SizedBox(height: 8),
                   _buildDemographicRow(
-                      color: const Color(0xFFEF4444),
-                      label: 'Others',
-                      percentage: '${othersPct.toStringAsFixed(1)}%'),
+                    color: const Color(0xFF8B5CF6), // VIOLET
+                    label: 'Others',
+                    percentage: '${othersPct.toStringAsFixed(1)}%',
+                  ),
                 ],
               );
             },
@@ -440,7 +446,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 }
 
 // -------------------------------------------------------------
-// UPCOMING APPOINTMENTS CARD WIDGET WITH LOCAL DIALOGS
+// UPCOMING APPOINTMENTS CARD WIDGET WITH CLEAN BADGES & VIEW ALL MODAL
 // -------------------------------------------------------------
 class UpcomingAppointmentsCardWidget extends StatefulWidget {
   const UpcomingAppointmentsCardWidget({super.key});
@@ -479,9 +485,19 @@ class _UpcomingAppointmentsCardWidgetState
                     color: Color(0xFF0F172A)),
               ),
               TextButton(
-                onPressed: () {},
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFFF1F5F9),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => _showViewAllModal(context),
                 child: const Text('View All',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF475569))),
               ),
             ],
           ),
@@ -669,7 +685,7 @@ class _UpcomingAppointmentsCardWidgetState
             style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
         Text(time,
             style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
-        _buildStatusBadge(status),
+        _buildCleanStatusText(status),
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert, size: 18, color: Color(0xFF64748B)),
           color: Colors.white,
@@ -711,45 +727,233 @@ class _UpcomingAppointmentsCardWidgetState
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color bgColor;
+  Widget _buildCleanStatusText(String status) {
     Color textColor;
 
     switch (status.toLowerCase()) {
       case 'confirmed':
-        bgColor = const Color(0xFFE0F2FE);
         textColor = const Color(0xFF0284C7);
         break;
       case 'in progress':
-        bgColor = const Color(0xFFFEF3C7);
         textColor = const Color(0xFFD97706);
         break;
       case 'completed':
-        bgColor = const Color(0xFFDCFCE7);
         textColor = const Color(0xFF16A34A);
         break;
       case 'pending':
-        bgColor = const Color(0xFFF1F5F9);
         textColor = const Color(0xFF64748B);
         break;
+      case 'urgent':
+        textColor = const Color(0xFFDC2626);
+        break;
       default:
-        bgColor = const Color(0xFFF1F5F9);
-        textColor = const Color(0xFF64748B);
+        textColor = const Color(0xFF0284C7);
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-          color: bgColor, borderRadius: BorderRadius.circular(20)),
-      child: Text(
-        status,
-        style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.bold, color: textColor),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: textColor, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          status,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+        ),
+      ],
     );
   }
 
-  // Local Method: Change Status Dialog
+  void _showViewAllModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Colors.white,
+          child: Container(
+            width: 800,
+            height: 600,
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'All Upcoming Appointments',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A)),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Comprehensive list of scheduled and pending patient appointments',
+                          style:
+                              TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          size: 22, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _db.collection('appointments').snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final allDocs =
+                          snapshot.hasData ? snapshot.data!.docs : [];
+                      final upcomingDocs = allDocs.where((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final status =
+                            (data['status'] ?? '').toString().toLowerCase();
+                        return status != 'completed' && status != 'cancelled';
+                      }).toList();
+
+                      if (upcomingDocs.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'No upcoming appointments found in database.',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF94A3B8),
+                                fontStyle: FontStyle.italic),
+                          ),
+                        );
+                      }
+
+                      return SingleChildScrollView(
+                        child: Table(
+                          columnWidths: const {
+                            0: FlexColumnWidth(2.0),
+                            1: FlexColumnWidth(2.0),
+                            2: FlexColumnWidth(1.5),
+                            3: FlexColumnWidth(1.5),
+                            4: FlexColumnWidth(1.2),
+                          },
+                          defaultVerticalAlignment:
+                              TableCellVerticalAlignment.middle,
+                          children: [
+                            const TableRow(
+                              children: [
+                                _TableHeader('PATIENT'),
+                                _TableHeader('SERVICE'),
+                                _TableHeader('TIME'),
+                                _TableHeader('DOCTOR'),
+                                _TableHeader('STATUS'),
+                              ],
+                            ),
+                            ...upcomingDocs.map((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+
+                              final name = data['patientName'] ??
+                                  data['petName'] ??
+                                  data['patient'] ??
+                                  'Pet Patient';
+                              final breed =
+                                  data['breed'] ?? data['species'] ?? 'Pet';
+                              final service = data['service'] ??
+                                  data['reason'] ??
+                                  'Consultation';
+                              final time = data['time'] ?? '09:00 AM';
+                              final doctor = data['doctor'] ??
+                                  data['assignedDoctor'] ??
+                                  'Dr. Tamesis';
+                              final status = data['status'] ?? 'Confirmed';
+
+                              return TableRow(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12.0),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(name,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                                color: Color(0xFF0F172A))),
+                                        Text(breed,
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                color: Color(0xFF94A3B8))),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(service,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF334155))),
+                                  Text(time,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF334155))),
+                                  Text(doctor,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF334155))),
+                                  _buildCleanStatusText(status),
+                                ],
+                              );
+                            }),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showChangeStatusDialog(
       BuildContext context, String docId, String currentStatus) {
     String selectedStatus = currentStatus;
@@ -926,7 +1130,6 @@ class _UpcomingAppointmentsCardWidgetState
     );
   }
 
-  // Local Method: Edit Details Dialog
   void _showEditAppointmentDialog(
       BuildContext context, String docId, String currentService) {
     final TextEditingController serviceController =
@@ -1016,4 +1219,60 @@ class _TableHeader extends StatelessWidget {
               color: Color(0xFF94A3B8))),
     );
   }
+}
+
+// Custom Multi-Color Donut Chart Painter
+class _DonutChartPainter extends CustomPainter {
+  final double dogsPct;
+  final double catsPct;
+  final double othersPct;
+
+  _DonutChartPainter({
+    required this.dogsPct,
+    required this.catsPct,
+    required this.othersPct,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 8;
+    const strokeWidth = 16.0;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    double startAngle = -1.5708; // Start at top (-90 degrees)
+
+    // 1. DOGS (Blue)
+    if (dogsPct > 0) {
+      final sweepAngle = (dogsPct / 100) * 2 * 3.141592653589793;
+      paint.color = const Color(0xFF0284C7);
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
+          startAngle, sweepAngle, false, paint);
+      startAngle += sweepAngle;
+    }
+
+    // 2. CATS (Orange)
+    if (catsPct > 0) {
+      final sweepAngle = (catsPct / 100) * 2 * 3.141592653589793;
+      paint.color = const Color(0xFFF97316);
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
+          startAngle, sweepAngle, false, paint);
+      startAngle += sweepAngle;
+    }
+
+    // 3. OTHERS (Violet - Birds, Rabbits, etc.)
+    if (othersPct > 0) {
+      final sweepAngle = (othersPct / 100) * 2 * 3.141592653589793;
+      paint.color = const Color(0xFF8B5CF6);
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
+          startAngle, sweepAngle, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
