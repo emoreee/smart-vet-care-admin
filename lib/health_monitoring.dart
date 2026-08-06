@@ -10,11 +10,15 @@ class HealthMonitoringScreen extends StatefulWidget {
 }
 
 class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // Selected filter for top stat cards: 'Active Monitoring', 'Critical Alerts', 'Discharged Today'
+  String _selectedStatFilter = 'Active Monitoring';
+
   // Mocking current logged in user role
-  final String _currentUserRole = 'Doctor'; // 'Doctor' or 'Staff'
+  final String _currentUserRole = 'Doctor';
   final String _currentDoctorName = 'Dr. Tamesis';
 
   @override
@@ -33,7 +37,32 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     super.dispose();
   }
 
-  // Doctor-Restricted New Intake Modal Launcher
+  String _formatDateToWords(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'No Date';
+    try {
+      final DateTime parsedDate = DateTime.parse(dateStr);
+      final List<String> months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ];
+      final monthName = months[parsedDate.month - 1];
+      final dayStr = parsedDate.day.toString().padLeft(2, '0');
+      return '$monthName $dayStr, ${parsedDate.year}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
   void _openNewIntakeModal() {
     if (_currentUserRole != 'Doctor') {
       showDialog(
@@ -73,96 +102,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     );
   }
 
-  // View All History Modal
-  void _openHistoryModal(List<QueryDocumentSnapshot> docs) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 520,
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Health Intake Activity Log',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A))),
-                  IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(context)),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final petName = data['petName'] ?? 'Pet';
-                      final breed =
-                          data['breed'] ?? data['species'] ?? 'Patient';
-                      final docName = data['doctorName'] ?? 'Attending Vet';
-                      final status = data['status'] ?? 'STABLE';
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                  color: const Color(0xFFDCFCE7),
-                                  borderRadius: BorderRadius.circular(8)),
-                              child: const Icon(Icons.medical_services_outlined,
-                                  color: Color(0xFF16A34A), size: 18),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("New Intake: $petName ($breed)",
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                          color: Color(0xFF0F172A))),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                      "Attending Vet: $docName • Status: $status",
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF64748B))),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,13 +115,11 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                 const _TopHeader(),
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('health_monitoring')
-                        .snapshots(),
+                    stream: _db.collection('health_monitoring').snapshots(),
                     builder: (context, snapshot) {
                       final docs = snapshot.data?.docs ?? [];
 
-                      // STATS CALCULATIONS
+                      // STATS CALCULATIONS CONNECTED TO FIRESTORE
                       int activeCount = 0;
                       int criticalCount = 0;
                       int dischargedTodayCount = 0;
@@ -204,7 +141,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                         }
                       }
 
-                      // Search Filter
+                      // SEARCH & STAT CARD FILTERING
                       final filteredDocs = docs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final petName =
@@ -216,11 +153,28 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                         final breed = (data['breed'] ?? data['species'] ?? '')
                             .toString()
                             .toLowerCase();
+                        final status =
+                            (data['status'] ?? '').toString().toUpperCase();
+                        final dischargedAt = data['dischargedAt'];
 
-                        return petName.contains(_searchQuery) ||
+                        final matchesSearch = petName.contains(_searchQuery) ||
                             petId.contains(_searchQuery) ||
                             ownerName.contains(_searchQuery) ||
                             breed.contains(_searchQuery);
+
+                        bool matchesStatFilter = true;
+                        if (_selectedStatFilter == 'Active Monitoring') {
+                          matchesStatFilter =
+                              (dischargedAt == null && status != 'DISCHARGED');
+                        } else if (_selectedStatFilter == 'Critical Alerts') {
+                          matchesStatFilter =
+                              (status == 'URGENT' || status == 'CRITICAL');
+                        } else if (_selectedStatFilter == 'Discharged Today') {
+                          matchesStatFilter =
+                              (status == 'DISCHARGED' || status == 'RECOVERED');
+                        }
+
+                        return matchesSearch && matchesStatFilter;
                       }).toList();
 
                       return SingleChildScrollView(
@@ -241,7 +195,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                             color: Color(0xFF64748B))),
                                     SizedBox(height: 4),
                                     Text(
-                                      'Health Monitoring - Pet Search',
+                                      'Health Monitoring - Patient Registry',
                                       style: TextStyle(
                                           fontSize: 26,
                                           fontWeight: FontWeight.bold,
@@ -249,7 +203,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                     ),
                                     SizedBox(height: 4),
                                     Text(
-                                      'Efficiently manage and monitor patient vital statistics, medical history, and upcoming checkups.',
+                                      'Efficiently manage and monitor patient vital statistics, medical history, and confinement status.',
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF64748B)),
@@ -304,7 +258,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                             ),
                             const SizedBox(height: 28),
 
-                            // STAT CARDS ROW
+                            // CLICKABLE STAT CARDS
                             Row(
                               children: [
                                 _StatCard(
@@ -313,6 +267,11 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                   icon: Icons.show_chart,
                                   iconBgColor: const Color(0xFFEEF2FF),
                                   iconColor: const Color(0xFF4F46E5),
+                                  isSelected: _selectedStatFilter ==
+                                      'Active Monitoring',
+                                  onTap: () => setState(() =>
+                                      _selectedStatFilter =
+                                          'Active Monitoring'),
                                 ),
                                 const SizedBox(width: 20),
                                 _StatCard(
@@ -322,6 +281,10 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                   icon: Icons.warning_amber_rounded,
                                   iconBgColor: const Color(0xFFFEE2E2),
                                   iconColor: const Color(0xFFDC2626),
+                                  isSelected:
+                                      _selectedStatFilter == 'Critical Alerts',
+                                  onTap: () => setState(() =>
+                                      _selectedStatFilter = 'Critical Alerts'),
                                 ),
                                 const SizedBox(width: 20),
                                 _StatCard(
@@ -332,363 +295,170 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                   icon: Icons.check_circle_outline,
                                   iconBgColor: const Color(0xFFDCFCE7),
                                   iconColor: const Color(0xFF16A34A),
+                                  isSelected:
+                                      _selectedStatFilter == 'Discharged Today',
+                                  onTap: () => setState(() =>
+                                      _selectedStatFilter = 'Discharged Today'),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 32),
 
-                            // MAIN CONTENT AREA
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Left Table Area (Patient Registry)
-                                Expanded(
-                                  flex: 3,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    padding: const EdgeInsets.all(24),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Header Bar with TOTAL BADGE & Search
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                const Text('Patient Registry',
-                                                    style: TextStyle(
-                                                        fontSize: 18,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color:
-                                                            Color(0xFF0F172A))),
-                                                const SizedBox(width: 12),
-                                                Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color:
-                                                        const Color(0xFFF1F5F9),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                    border: Border.all(
-                                                        color: const Color(
-                                                            0xFFE2E8F0)),
-                                                  ),
-                                                  child: Text(
-                                                    '${docs.length} TOTAL',
-                                                    style: const TextStyle(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color:
-                                                            Color(0xFF64748B)),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-
-                                            // Search Input
-                                            Container(
-                                              width: 260,
-                                              height: 38,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF8FAFC),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                    color: const Color(
-                                                        0xFFE2E8F0)),
-                                              ),
-                                              child: TextField(
-                                                controller: _searchController,
-                                                style: const TextStyle(
-                                                    fontSize: 12),
-                                                decoration:
-                                                    const InputDecoration(
-                                                  hintText:
-                                                      'Search by name, owner, or ID...',
-                                                  hintStyle: TextStyle(
-                                                      fontSize: 11,
-                                                      color: Color(0xFF94A3B8)),
-                                                  prefixIcon: Icon(Icons.search,
-                                                      size: 16,
-                                                      color: Color(0xFF94A3B8)),
-                                                  border: InputBorder.none,
-                                                  contentPadding:
-                                                      EdgeInsets.symmetric(
-                                                          vertical: 8),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 20),
-
-                                        // PATIENT REGISTRY TABLE
-                                        Table(
-                                          columnWidths: const {
-                                            0: FlexColumnWidth(1.2), // PET ID
-                                            1: FlexColumnWidth(1.6), // PET NAME
-                                            2: FlexColumnWidth(
-                                                2.0), // OWNER'S NAME
-                                            3: FlexColumnWidth(1.8), // BREED
-                                            4: FlexColumnWidth(1.4), // STATUS
-                                            5: FlexColumnWidth(1.0), // ACTIONS
-                                          },
-                                          defaultVerticalAlignment:
-                                              TableCellVerticalAlignment.middle,
-                                          children: [
-                                            const TableRow(
-                                              children: [
-                                                _TableHeader('PET ID'),
-                                                _TableHeader('PET NAME'),
-                                                _TableHeader('OWNER\'S NAME'),
-                                                _TableHeader('BREED'),
-                                                _TableHeader('STATUS'),
-                                                _TableHeader('ACTIONS'),
-                                              ],
-                                            ),
-                                            for (var doc in filteredDocs)
-                                              _buildRow(doc),
-                                          ],
-                                        ),
-
-                                        if (filteredDocs.isEmpty)
-                                          const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                                vertical: 40.0),
-                                            child: Center(
-                                              child: Text(
-                                                  'No patients found in monitoring registry.',
-                                                  style: TextStyle(
-                                                      color: Color(0xFF94A3B8),
-                                                      fontSize: 13)),
-                                            ),
-                                          ),
-
-                                        const SizedBox(height: 24),
-
-                                        // Dynamic Pagination Display
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'Showing 1 to ${filteredDocs.length} of ${docs.length} pets',
+                            // FULL-WIDTH PATIENT REGISTRY TABLE WITH CONFINEMENT STATUS
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                              'Patient Registry (${_selectedStatFilter})',
                                               style: const TextStyle(
-                                                  fontSize: 12,
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF0F172A))),
+                                          const SizedBox(width: 12),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                  color:
+                                                      const Color(0xFFE2E8F0)),
+                                            ),
+                                            child: Text(
+                                              '${filteredDocs.length} TOTAL',
+                                              style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
                                                   color: Color(0xFF64748B)),
                                             ),
-                                            Row(
-                                              children: const [
-                                                IconButton(
-                                                    icon: Icon(
-                                                        Icons.chevron_left,
-                                                        size: 20,
-                                                        color:
-                                                            Color(0xFF94A3B8)),
-                                                    onPressed: null),
-                                                IconButton(
-                                                    icon: Icon(
-                                                        Icons.chevron_right,
-                                                        size: 20,
-                                                        color:
-                                                            Color(0xFF94A3B8)),
-                                                    onPressed: null),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-
-                                // Right Area (Recent Activity Only)
-                                Expanded(
-                                  flex: 1,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    padding: const EdgeInsets.all(20),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Recent Activity',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                              color: Color(0xFF0F172A)),
-                                        ),
-                                        const SizedBox(height: 16),
-
-                                        // Dynamic List from DB
-                                        if (docs.isEmpty)
-                                          const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                                vertical: 24),
-                                            child: Center(
-                                              child: Text(
-                                                  'No recent monitoring activity.',
-                                                  style: TextStyle(
-                                                      fontSize: 12,
-                                                      color:
-                                                          Color(0xFF94A3B8))),
-                                            ),
-                                          )
-                                        else
-                                          Column(
-                                            children: docs.take(4).map((doc) {
-                                              final data = doc.data()
-                                                  as Map<String, dynamic>;
-                                              final petName =
-                                                  data['petName'] ?? 'Patient';
-                                              final breed = data['breed'] ??
-                                                  data['species'] ??
-                                                  'Patient';
-                                              final docName =
-                                                  data['doctorName'] ??
-                                                      'Dr. Tamesis';
-                                              final status =
-                                                  (data['status'] ?? 'STABLE')
-                                                      .toString()
-                                                      .toUpperCase();
-
-                                              return Container(
-                                                margin: const EdgeInsets.only(
-                                                    bottom: 12),
-                                                padding:
-                                                    const EdgeInsets.all(12),
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      const Color(0xFFF8FAFC),
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                      color: const Color(
-                                                          0xFFF1F5F9)),
-                                                ),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Container(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              6),
-                                                      decoration: BoxDecoration(
-                                                        color: status ==
-                                                                    'URGENT' ||
-                                                                status ==
-                                                                    'CRITICAL'
-                                                            ? const Color(
-                                                                0xFFFEE2E2)
-                                                            : const Color(
-                                                                0xFFDCFCE7),
-                                                        shape: BoxShape.circle,
-                                                      ),
-                                                      child: Icon(
-                                                        status == 'URGENT' ||
-                                                                status ==
-                                                                    'CRITICAL'
-                                                            ? Icons
-                                                                .warning_amber_rounded
-                                                            : Icons
-                                                                .medical_services_outlined,
-                                                        color: status ==
-                                                                    'URGENT' ||
-                                                                status ==
-                                                                    'CRITICAL'
-                                                            ? const Color(
-                                                                0xFFDC2626)
-                                                            : const Color(
-                                                                0xFF16A34A),
-                                                        size: 14,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children: [
-                                                          Text(
-                                                            'New Intake: "$petName"',
-                                                            style: const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: Color(
-                                                                    0xFF0F172A)),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 2),
-                                                          Text(
-                                                            '$breed • $docName',
-                                                            style: const TextStyle(
-                                                                fontSize: 11,
-                                                                color: Color(
-                                                                    0xFF64748B)),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
                                           ),
-
-                                        const SizedBox(height: 12),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: OutlinedButton(
-                                            onPressed: () =>
-                                                _openHistoryModal(docs),
-                                            style: OutlinedButton.styleFrom(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      vertical: 12),
-                                              shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8)),
-                                              side: const BorderSide(
-                                                  color: Color(0xFFCBD5E1)),
-                                            ),
-                                            child: const Text(
-                                                'View All History',
-                                                style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF334155))),
+                                        ],
+                                      ),
+                                      Container(
+                                        width: 280,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF8FAFC),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                              color: const Color(0xFFE2E8F0)),
+                                        ),
+                                        child: TextField(
+                                          controller: _searchController,
+                                          style: const TextStyle(fontSize: 12),
+                                          decoration: const InputDecoration(
+                                            hintText:
+                                                'Search by name, owner, or ID...',
+                                            hintStyle: TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF94A3B8)),
+                                            prefixIcon: Icon(Icons.search,
+                                                size: 16,
+                                                color: Color(0xFF94A3B8)),
+                                            border: InputBorder.none,
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    vertical: 8),
                                           ),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 20),
+
+                                  // PATIENT REGISTRY TABLE WITH CONFINEMENT STATUS
+                                  Table(
+                                    columnWidths: const {
+                                      0: FlexColumnWidth(1.2), // PET ID
+                                      1: FlexColumnWidth(1.5), // PET NAME
+                                      2: FlexColumnWidth(1.8), // OWNER'S NAME
+                                      3: FlexColumnWidth(1.4), // BREED
+                                      4: FlexColumnWidth(
+                                          1.8), // CONFINEMENT STATUS
+                                      5: FlexColumnWidth(1.2), // MEDICAL STATUS
+                                      6: FlexColumnWidth(0.9), // ACTIONS
+                                    },
+                                    defaultVerticalAlignment:
+                                        TableCellVerticalAlignment.middle,
+                                    children: [
+                                      const TableRow(
+                                        children: [
+                                          _TableHeader('PET ID'),
+                                          _TableHeader('PET NAME'),
+                                          _TableHeader('OWNER\'S NAME'),
+                                          _TableHeader('BREED'),
+                                          _TableHeader('CONFINEMENT'),
+                                          _TableHeader('STATUS'),
+                                          _TableHeader('ACTIONS'),
+                                        ],
+                                      ),
+                                      for (var doc in filteredDocs)
+                                        _buildRow(doc),
+                                    ],
+                                  ),
+
+                                  if (filteredDocs.isEmpty)
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 40.0),
+                                      child: Center(
+                                        child: Text(
+                                            'No patients found matching this filter.',
+                                            style: TextStyle(
+                                                color: Color(0xFF94A3B8),
+                                                fontSize: 13,
+                                                fontStyle: FontStyle.italic)),
+                                      ),
+                                    ),
+
+                                  const SizedBox(height: 24),
+
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Showing 1 to ${filteredDocs.length} of ${docs.length} entries',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF64748B)),
+                                      ),
+                                      Row(
+                                        children: const [
+                                          IconButton(
+                                              icon: Icon(Icons.chevron_left,
+                                                  size: 20,
+                                                  color: Color(0xFF94A3B8)),
+                                              onPressed: null),
+                                          IconButton(
+                                              icon: Icon(Icons.chevron_right,
+                                                  size: 20,
+                                                  color: Color(0xFF94A3B8)),
+                                              onPressed: null),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -707,11 +477,14 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
   TableRow _buildRow(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
-    final petId = data['petId'] ?? '#FF-0000';
-    final petName = data['petName'] ?? 'N/A';
-    final ownerName = data['ownerName'] ?? 'N/A';
-    final breed = data['breed'] ?? data['species'] ?? 'N/A';
+    final petId = data['petId'] ?? 'PET-00000';
+    final petName = data['petName'] ?? data['name'] ?? 'Pet';
+    final ownerName = data['ownerName'] ?? 'Owner';
+    final breed = data['breed'] ?? data['species'] ?? 'Dog';
     final status = (data['status'] ?? 'STABLE').toString().toUpperCase();
+    final dischargedAt = data['dischargedAt'];
+
+    bool isConfined = (dischargedAt == null && status != 'DISCHARGED');
 
     return TableRow(
       children: [
@@ -735,9 +508,36 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                 fontSize: 13,
                 color: Color(0xFF64748B),
                 fontWeight: FontWeight.w500)),
+        // CONFINEMENT STATUS BADGE (CONFINED VS NAKAUWI NA)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isConfined ? Icons.hotel_outlined : Icons.home_outlined,
+                size: 14,
+                color: isConfined
+                    ? const Color(0xFF0284C7)
+                    : const Color(0xFF16A34A),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                isConfined ? 'CONFINED' : 'NAKAUWI NA',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isConfined
+                      ? const Color(0xFF0284C7)
+                      : const Color(0xFF16A34A),
+                ),
+              ),
+            ],
+          ),
+        ),
         _buildStatusBadge(status),
         InkWell(
-          onTap: () {},
+          onTap: () => _openPatientDetailsModal(doc.id, data),
           child: const Text('Details',
               style: TextStyle(
                   fontSize: 12,
@@ -748,16 +548,15 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     );
   }
 
-  // Plain Colored Text Status
   Widget _buildStatusBadge(String status) {
-    Color textColor = const Color(0xFF16A34A); // Green for STABLE
+    Color textColor = const Color(0xFF16A34A);
 
     if (status == 'URGENT' || status == 'CRITICAL') {
-      textColor = const Color(0xFFDC2626); // Red
-    } else if (status == 'RECOVERED') {
-      textColor = const Color(0xFF0D9488); // Teal
+      textColor = const Color(0xFFDC2626);
+    } else if (status == 'RECOVERED' || status == 'DISCHARGED') {
+      textColor = const Color(0xFF0D9488);
     } else if (status == 'OBSERVATION') {
-      textColor = const Color(0xFFD97706); // Amber
+      textColor = const Color(0xFFD97706);
     }
 
     return Text(
@@ -770,11 +569,356 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
       ),
     );
   }
+
+  // PATIENT DETAILS MODAL DIRECTLY CONNECTED TO FIRESTORE 'medical_records' FIELDS
+  void _openPatientDetailsModal(String docId, Map<String, dynamic> data) {
+    final petName = data['petName'] ?? data['name'] ?? 'Pet Patient';
+    final petId = data['petId'] ?? 'PET-00000';
+    final breed = data['breed'] ?? data['species'] ?? 'Dog';
+    final ownerName = data['ownerName'] ?? 'Owner';
+    final doctorName = data['doctorName'] ?? 'Dr. Tamesis';
+    final status = (data['status'] ?? 'STABLE').toString().toUpperCase();
+    final dischargedAt = data['dischargedAt'];
+
+    bool isConfined = (dischargedAt == null && status != 'DISCHARGED');
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: 680,
+          padding: const EdgeInsets.all(28),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          backgroundColor: Color(0xFFEEF2FF),
+                          child: Icon(Icons.pets, color: Color(0xFF4F46E5)),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(petName,
+                                style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F172A))),
+                            Text('$petId ($breed) • Owner: $ownerName',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Color(0xFF64748B))),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(context)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0))),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ATTENDING VET: $doctorName',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF475569))),
+                          const SizedBox(height: 2),
+                          Text(
+                            isConfined
+                                ? 'STATUS: CONFINED AT CLINIC BAY'
+                                : 'STATUS: DISCHARGED / NAKAUWI NA',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isConfined
+                                  ? const Color(0xFF0284C7)
+                                  : const Color(0xFF16A34A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      _buildStatusBadge(status),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'MEDICAL RECORDS & CLINICAL DIAGNOSIS HISTORY',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF94A3B8),
+                      letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 10),
+
+                // STREAM FROM FIRESTORE 'medical_records' COLLECTION
+                StreamBuilder<QuerySnapshot>(
+                  stream: _db
+                      .collection('medical_records')
+                      .where('petId', isEqualTo: petId)
+                      .snapshots(),
+                  builder: (context, recordSnap) {
+                    if (recordSnap.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final records = recordSnap.data?.docs ?? [];
+
+                    if (records.isEmpty) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0))),
+                        child: const Text(
+                          'No prior consultation or clinical diagnosis found for this pet.',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF94A3B8),
+                              fontStyle: FontStyle.italic),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: records.map((doc) {
+                        final rec = doc.data() as Map<String, dynamic>;
+
+                        // FIRESTORE FIELD MAPPINGS FROM YOUR SCREENSHOT
+                        final diagnosis =
+                            rec['diagnosis'] ?? 'No recorded diagnosis';
+                        final prescription =
+                            rec['prescription'] ?? 'None prescribed';
+                        final veterinarianNotes = rec['veterinarianNotes'] ??
+                            rec['notes'] ??
+                            'No notes provided';
+                        final service = rec['service'] ?? 'General Checkup';
+                        final docName = rec['doctorName'] ?? doctorName;
+                        final isUrgent = rec['isUrgent'] ?? false;
+
+                        String formattedDate = 'Recent';
+                        if (rec['createdAt'] != null &&
+                            rec['createdAt'] is Timestamp) {
+                          formattedDate = _formatDateToWords(
+                              (rec['createdAt'] as Timestamp)
+                                  .toDate()
+                                  .toString());
+                        }
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: isUrgent
+                                      ? const Color(0xFFFCA5A5)
+                                      : const Color(0xFFE2E8F0))),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEEF2FF),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          service.toString().toUpperCase(),
+                                          style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF4F46E5)),
+                                        ),
+                                      ),
+                                      if (isUrgent == true) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFEF2F2),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: const Color(0xFFFCA5A5)),
+                                          ),
+                                          child: const Text(
+                                            'URGENT',
+                                            style: TextStyle(
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFFDC2626)),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  Text(formattedDate,
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF64748B))),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              // CLINICAL DIAGNOSIS
+                              const Text('CLINICAL DIAGNOSIS:',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 2),
+                              Text(diagnosis,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A))),
+                              const SizedBox(height: 10),
+
+                              // PRESCRIBED MEDICATIONS
+                              const Text('PRESCRIBED MEDICATIONS / TREATMENT:',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 2),
+                              Text(prescription,
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF334155))),
+                              const SizedBox(height: 10),
+
+                              // VETERINARIAN NOTES
+                              const Text('VETERINARIAN NOTES:',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF94A3B8))),
+                              const SizedBox(height: 2),
+                              Text(veterinarianNotes,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Color(0xFF64748B))),
+                              const SizedBox(height: 10),
+
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Text('Attending Vet: $docName',
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A))),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // ACTION TO TOGGLE DISCHARGE (NAKAUWI NA)
+                    if (isConfined)
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.home_outlined, size: 18),
+                        label: const Text('Discharge Patient (Uuwi Na)',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12)),
+                        onPressed: () async {
+                          await _db
+                              .collection('health_monitoring')
+                              .doc(docId)
+                              .update({
+                            'status': 'DISCHARGED',
+                            'dischargedAt': FieldValue.serverTimestamp(),
+                          });
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  '$petName has been discharged and marked as Nakauwi Na!'),
+                            ),
+                          );
+                        },
+                      )
+                    else
+                      const Text(
+                        '✓ Patient is already Discharged',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF16A34A)),
+                      ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F172A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close Record',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-// ==========================================
-// NEW PATIENT INTAKE MODAL (Fixed & Overflow-Free)
-// ==========================================
 class NewPatientIntakeModal extends StatefulWidget {
   final String doctorName;
   const NewPatientIntakeModal({super.key, required this.doctorName});
@@ -853,11 +997,11 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
         await FirebaseFirestore.instance.collection('health_monitoring').add({
           'intakeId': intakeId,
           'petDocId': _selectedPetDocId,
-          'petId': _selectedPetId ?? '#PET-00001',
+          'petId': _selectedPetId ?? 'PET-00001',
           'petName': _selectedPetName ?? 'Pet',
           'breed': _selectedBreed ?? 'General',
           'ownerDocId': _selectedOwnerDocId,
-          'ownerId': _selectedOwnerId ?? '#OWN-00001',
+          'ownerId': _selectedOwnerId ?? 'OWN-00001',
           'ownerName': _selectedOwnerName ?? 'Owner',
           'doctorName': widget.doctorName,
           'chiefComplaint': _chiefComplaintController.text.trim(),
@@ -930,8 +1074,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Owner Search
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
@@ -945,8 +1087,9 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                         return "${data['fullName']} (${data['ownerID'] ?? data['ownerId'] ?? ''})";
                       },
                       optionsBuilder: (textVal) {
-                        if (textVal.text.trim().isEmpty)
+                        if (textVal.text.trim().isEmpty) {
                           return const Iterable<QueryDocumentSnapshot>.empty();
+                        }
                         final q = textVal.text.toLowerCase();
                         return users.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
@@ -964,9 +1107,8 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                         final data = doc.data() as Map<String, dynamic>;
                         setState(() {
                           _selectedOwnerDocId = doc.id;
-                          _selectedOwnerId = data['ownerID'] ??
-                              data['ownerId'] ??
-                              '#OWN-00001';
+                          _selectedOwnerId =
+                              data['ownerID'] ?? data['ownerId'] ?? 'OWN-00001';
                           _selectedOwnerName = data['fullName'] ?? 'Owner';
                           _selectedPetDocId = null;
                         });
@@ -987,8 +1129,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                   },
                 ),
                 const SizedBox(height: 12),
-
-                // Pet Dropdown (Safely mapping using Document ID String)
                 if (_selectedOwnerDocId != null)
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
@@ -1030,7 +1170,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                     },
                   ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _chiefComplaintController,
                   decoration: _inputDeco('CHIEF COMPLAINT / REASON*',
@@ -1039,7 +1178,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                       (v == null || v.isEmpty) ? 'Required' : null,
                 ),
                 const SizedBox(height: 12),
-
                 Row(
                   children: [
                     Expanded(
@@ -1066,7 +1204,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                   ],
                 ),
                 const SizedBox(height: 12),
-
                 const Text('INITIAL VITALS',
                     style: TextStyle(
                         fontSize: 11,
@@ -1092,7 +1229,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                   ],
                 ),
                 const SizedBox(height: 20),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -1139,6 +1275,8 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconBgColor;
   final Color iconColor;
+  final bool isSelected;
+  final VoidCallback onTap;
 
   const _StatCard({
     required this.label,
@@ -1146,44 +1284,64 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.iconBgColor,
     required this.iconColor,
+    required this.isSelected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                  color: iconBgColor, borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: iconColor, size: 22),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? iconColor : const Color(0xFFE2E8F0),
+              width: isSelected ? 2.2 : 1.0,
             ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8))),
-                const SizedBox(height: 2),
-                Text(count,
-                    style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A))),
-              ],
-            ),
-          ],
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                        color: iconColor.withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2))
+                  ]
+                : [],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: iconBgColor,
+                    borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? iconColor
+                              : const Color(0xFF94A3B8))),
+                  const SizedBox(height: 2),
+                  Text(count,
+                      style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

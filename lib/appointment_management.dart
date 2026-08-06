@@ -15,9 +15,67 @@ class _AppointmentManagementScreenState
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   String _searchQuery = '';
-  String _selectedTab =
-      'Confirmed'; // 'Pending Requests', 'Confirmed', 'Completed'
-  String _calendarViewMode = 'Monthly'; // 'Monthly', 'Weekly', 'Daily'
+  String _selectedFilter = 'All';
+
+  bool _isDateInCurrentWeek(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return false;
+    try {
+      final appDate = DateTime.parse(dateStr);
+      final now = DateTime.now();
+
+      final startOfWeek =
+          DateTime(now.year, now.month, now.day - now.weekday % 7);
+      final endOfWeek = startOfWeek
+          .add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+
+      return appDate
+              .isAfter(startOfWeek.subtract(const Duration(seconds: 1))) &&
+          appDate.isBefore(endOfWeek);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  String _formatDateToWords(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'No Date';
+    try {
+      final DateTime parsedDate = DateTime.parse(dateStr);
+      final List<String> months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ];
+      final monthName = months[parsedDate.month - 1];
+      final dayStr = parsedDate.day.toString().padLeft(2, '0');
+      return '$monthName $dayStr, ${parsedDate.year}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  DateTime _getAppointmentBookingTime(Map<String, dynamic> data) {
+    try {
+      if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+        return (data['createdAt'] as Timestamp).toDate();
+      }
+      final dateStr = data['date']?.toString().trim() ?? '';
+      if (dateStr.isNotEmpty) {
+        return DateTime.parse(dateStr);
+      }
+    } catch (e) {
+      // Fallback
+    }
+    return DateTime(2026, 1, 1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +83,7 @@ class _AppointmentManagementScreenState
       backgroundColor: const Color(0xFFF8FAFC),
       body: Row(
         children: [
-          // Sidebar Component
           const SidebarMenu(activeRoute: '/appointments'),
-
-          // Main View
           Expanded(
             child: Column(
               children: [
@@ -43,7 +98,9 @@ class _AppointmentManagementScreenState
                         final docs =
                             snapshot.hasData ? snapshot.data!.docs : [];
 
-                        // DYNAMIC REAL-TIME COUNTS FROM FIRESTORE
+                        final allCount = docs.length;
+
+                        // PENDING ONLY
                         final pendingCount = docs.where((d) {
                           final status =
                               (d.data() as Map<String, dynamic>)['status'] ??
@@ -51,6 +108,7 @@ class _AppointmentManagementScreenState
                           return status.toString().toLowerCase() == 'pending';
                         }).length;
 
+                        // CONFIRMED ONLY (EXCLUDES COMPLETED)
                         final confirmedTodayCount = docs.where((d) {
                           final status =
                               (d.data() as Map<String, dynamic>)['status'] ??
@@ -58,19 +116,31 @@ class _AppointmentManagementScreenState
                           return status.toString().toLowerCase() == 'confirmed';
                         }).length;
 
+                        // UPCOMING THIS WEEK ONLY (ACTIVE STATUSES ONLY: PENDING / CONFIRMED)
                         final upcomingWeekCount = docs.where((d) {
+                          final data = d.data() as Map<String, dynamic>;
                           final status =
-                              (d.data() as Map<String, dynamic>)['status'] ??
-                                  '';
-                          return status.toString().toLowerCase() ==
-                                  'confirmed' ||
-                              status.toString().toLowerCase() == 'pending';
+                              (data['status'] ?? '').toString().toLowerCase();
+                          final dateStr = data['date']?.toString();
+                          final isActive =
+                              status == 'pending' || status == 'confirmed';
+                          return isActive && _isDateInCurrentWeek(dateStr);
+                        }).length;
+
+                        // URGENT CASES ONLY (EXCLUDES COMPLETED)
+                        final urgentCasesCount = docs.where((d) {
+                          final data = d.data() as Map<String, dynamic>;
+                          final isUrgent = data['isUrgent'] ?? false;
+                          final status =
+                              (data['status'] ?? '').toString().toLowerCase();
+                          final isActive =
+                              status != 'completed' && status != 'cancelled';
+                          return isUrgent == true && isActive;
                         }).length;
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Header Title Bar
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -102,11 +172,51 @@ class _AppointmentManagementScreenState
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
-
-                            // 1. TOP 3 METRIC CARDS ROW
+                            const SizedBox(height: 16),
+                            Container(
+                              width: double.infinity,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border:
+                                    Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: TextField(
+                                onChanged: (val) {
+                                  setState(() {
+                                    _searchQuery = val.toLowerCase().trim();
+                                  });
+                                },
+                                decoration: const InputDecoration(
+                                  hintText:
+                                      'Search by Pet ID, Pet Name, Owner, Service, or Doctor...',
+                                  hintStyle: TextStyle(
+                                      fontSize: 12, color: Color(0xFF94A3B8)),
+                                  prefixIcon: Icon(Icons.search,
+                                      size: 18, color: Color(0xFF94A3B8)),
+                                  border: InputBorder.none,
+                                  contentPadding:
+                                      EdgeInsets.symmetric(vertical: 11),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
                             Row(
                               children: [
+                                Expanded(
+                                  child: _buildMetricCard(
+                                    title: 'ALL APPOINTMENTS',
+                                    count: allCount.toString().padLeft(2, '0'),
+                                    icon: Icons.grid_view_rounded,
+                                    color: const Color(0xFF0F172A),
+                                    bgColor: const Color(0xFFF1F5F9),
+                                    onTap: () =>
+                                        setState(() => _selectedFilter = 'All'),
+                                    isSelected: _selectedFilter == 'All',
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: _buildMetricCard(
                                     title: 'PENDING REQUESTS',
@@ -115,9 +225,13 @@ class _AppointmentManagementScreenState
                                     icon: Icons.assignment_outlined,
                                     color: const Color(0xFFD97706),
                                     bgColor: const Color(0xFFFEF3C7),
+                                    onTap: () => setState(() =>
+                                        _selectedFilter = 'Pending Requests'),
+                                    isSelected:
+                                        _selectedFilter == 'Pending Requests',
                                   ),
                                 ),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: _buildMetricCard(
                                     title: 'CONFIRMED TODAY',
@@ -127,9 +241,13 @@ class _AppointmentManagementScreenState
                                     icon: Icons.check_circle_outline,
                                     color: const Color(0xFF16A34A),
                                     bgColor: const Color(0xFFDCFCE7),
+                                    onTap: () => setState(() =>
+                                        _selectedFilter = 'Confirmed Today'),
+                                    isSelected:
+                                        _selectedFilter == 'Confirmed Today',
                                   ),
                                 ),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: _buildMetricCard(
                                     title: 'UPCOMING THIS WEEK',
@@ -139,524 +257,361 @@ class _AppointmentManagementScreenState
                                     icon: Icons.calendar_today_outlined,
                                     color: const Color(0xFF4F46E5),
                                     bgColor: const Color(0xFFEEF2FF),
+                                    onTap: () => setState(() =>
+                                        _selectedFilter = 'Upcoming This Week'),
+                                    isSelected:
+                                        _selectedFilter == 'Upcoming This Week',
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildMetricCard(
+                                    title: 'URGENT CASES',
+                                    count: urgentCasesCount
+                                        .toString()
+                                        .padLeft(2, '0'),
+                                    icon: Icons.warning_amber_rounded,
+                                    color: const Color(0xFFDC2626),
+                                    bgColor: const Color(0xFFFEF2F2),
+                                    onTap: () => setState(
+                                        () => _selectedFilter = 'Urgent Cases'),
+                                    isSelected:
+                                        _selectedFilter == 'Urgent Cases',
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 24),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(24.0),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16.0),
+                                border:
+                                    Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: Builder(
+                                builder: (context) {
+                                  var filteredDocs = docs.where((doc) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    final owner = (data['ownerName'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final petId = (data['petId'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final petName =
+                                        (data['petName'] ?? data['name'] ?? '')
+                                            .toString()
+                                            .toLowerCase();
+                                    final service = (data['service'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final doctor = (data['doctor'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final status = (data['status'] ?? 'Pending')
+                                        .toString()
+                                        .trim()
+                                        .toLowerCase();
+                                    final isUrgent = data['isUrgent'] ?? false;
+                                    final dateStr = data['date']?.toString();
 
-                            // 2. MAIN CONTENT ROW (TABLE + CALENDAR VIEW)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Left Side: Main Appointments Table
-                                Expanded(
-                                  flex: 7,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24.0),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16.0),
-                                      border: Border.all(
-                                          color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Status Filter Tabs & Search Bar Row
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                _buildTabButton(
-                                                    'Pending Requests'),
-                                                const SizedBox(width: 8),
-                                                _buildTabButton('Confirmed'),
-                                                const SizedBox(width: 8),
-                                                _buildTabButton('Completed'),
-                                              ],
-                                            ),
-                                            Container(
-                                              width: 220,
-                                              height: 38,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF8FAFC),
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                border: Border.all(
-                                                    color: const Color(
-                                                        0xFFE2E8F0)),
-                                              ),
-                                              child: TextField(
-                                                onChanged: (val) {
-                                                  setState(() {
-                                                    _searchQuery = val
-                                                        .toLowerCase()
-                                                        .trim();
-                                                  });
-                                                },
-                                                decoration:
-                                                    const InputDecoration(
-                                                  hintText:
-                                                      'Search appointments...',
-                                                  hintStyle: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Color(0xFF94A3B8)),
-                                                  prefixIcon: Icon(Icons.search,
-                                                      size: 16,
-                                                      color: Color(0xFF94A3B8)),
-                                                  border: InputBorder.none,
-                                                  contentPadding:
-                                                      EdgeInsets.symmetric(
-                                                          vertical: 8),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                    final matchesSearch =
+                                        owner.contains(_searchQuery) ||
+                                            petId.contains(_searchQuery) ||
+                                            petName.contains(_searchQuery) ||
+                                            service.contains(_searchQuery) ||
+                                            doctor.contains(_searchQuery);
+
+                                    bool matchesFilter = true;
+                                    if (_selectedFilter == 'Pending Requests') {
+                                      matchesFilter = (status == 'pending');
+                                    } else if (_selectedFilter ==
+                                        'Confirmed Today') {
+                                      matchesFilter = (status == 'confirmed');
+                                    } else if (_selectedFilter ==
+                                        'Upcoming This Week') {
+                                      matchesFilter = (status == 'pending' ||
+                                              status == 'confirmed') &&
+                                          _isDateInCurrentWeek(dateStr);
+                                    } else if (_selectedFilter ==
+                                        'Urgent Cases') {
+                                      matchesFilter = (isUrgent == true) &&
+                                          (status != 'completed' &&
+                                              status != 'cancelled');
+                                    }
+
+                                    return matchesSearch && matchesFilter;
+                                  }).toList();
+
+                                  filteredDocs.sort((a, b) {
+                                    final aData =
+                                        a.data() as Map<String, dynamic>;
+                                    final bData =
+                                        b.data() as Map<String, dynamic>;
+
+                                    final aDateTime =
+                                        _getAppointmentBookingTime(aData);
+                                    final bDateTime =
+                                        _getAppointmentBookingTime(bData);
+
+                                    return aDateTime.compareTo(bDateTime);
+                                  });
+
+                                  if (filteredDocs.isEmpty) {
+                                    return const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 40.0),
+                                      child: Center(
+                                        child: Text(
+                                          'No appointments found for this view.',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF94A3B8),
+                                              fontStyle: FontStyle.italic),
                                         ),
-                                        const SizedBox(height: 20),
+                                      ),
+                                    );
+                                  }
 
-                                        // Filter Documents
-                                        Builder(
-                                          builder: (context) {
-                                            var filteredDocs =
-                                                docs.where((doc) {
-                                              final data = doc.data()
-                                                  as Map<String, dynamic>;
-                                              final owner =
-                                                  (data['ownerName'] ?? '')
-                                                      .toString()
-                                                      .toLowerCase();
-                                              final petId =
-                                                  (data['petId'] ?? '')
-                                                      .toString()
-                                                      .toLowerCase();
-                                              final petName =
-                                                  (data['petName'] ??
-                                                          data['name'] ??
-                                                          '')
-                                                      .toString()
-                                                      .toLowerCase();
-                                              final service =
-                                                  (data['service'] ?? '')
-                                                      .toString()
-                                                      .toLowerCase();
-                                              final status =
-                                                  (data['status'] ?? 'Pending')
-                                                      .toString()
-                                                      .trim()
-                                                      .toLowerCase();
+                                  return Column(
+                                    children: [
+                                      Table(
+                                        columnWidths: const {
+                                          0: FlexColumnWidth(1.2),
+                                          1: FlexColumnWidth(1.5),
+                                          2: FlexColumnWidth(1.8),
+                                          3: FlexColumnWidth(2.0),
+                                          4: FlexColumnWidth(1.5),
+                                          5: FlexColumnWidth(1.2),
+                                        },
+                                        defaultVerticalAlignment:
+                                            TableCellVerticalAlignment.middle,
+                                        children: [
+                                          const TableRow(
+                                            children: [
+                                              _TableHeader('PET ID'),
+                                              _TableHeader('PET INFO'),
+                                              _TableHeader('OWNER'),
+                                              _TableHeader('DATE & TIME'),
+                                              _TableHeader('SERVICES'),
+                                              _TableHeader('ACTIONS'),
+                                            ],
+                                          ),
+                                          ...filteredDocs.map((doc) {
+                                            final data = doc.data()
+                                                as Map<String, dynamic>;
 
-                                              final matchesSearch = owner
-                                                      .contains(_searchQuery) ||
-                                                  petId
-                                                      .contains(_searchQuery) ||
-                                                  petName
-                                                      .contains(_searchQuery) ||
-                                                  service
-                                                      .contains(_searchQuery);
+                                            final petId =
+                                                data['petId'] ?? 'PET-00000';
+                                            final petName = data['petName'] ??
+                                                data['name'] ??
+                                                'Pet';
+                                            final species = data['species'] ??
+                                                data['breed'] ??
+                                                'Dog';
+                                            final owner =
+                                                data['ownerName'] ?? 'Owner';
+                                            final rawDate =
+                                                data['date'] ?? '2026-08-05';
+                                            final formattedDate =
+                                                _formatDateToWords(
+                                                    rawDate.toString());
+                                            final time = data['time'] ??
+                                                '09:00 AM - 10:30 AM';
+                                            final service = data['service'] ??
+                                                'General Checkup';
+                                            final status =
+                                                (data['status'] ?? 'Pending')
+                                                    .toString();
 
-                                              bool matchesTab = true;
-                                              if (_selectedTab ==
-                                                  'Pending Requests') {
-                                                matchesTab =
-                                                    (status == 'pending');
-                                              } else if (_selectedTab ==
-                                                  'Confirmed') {
-                                                matchesTab =
-                                                    (status == 'confirmed');
-                                              } else if (_selectedTab ==
-                                                  'Completed') {
-                                                matchesTab =
-                                                    (status == 'completed');
-                                              }
-
-                                              return matchesSearch &&
-                                                  matchesTab;
-                                            }).toList();
-
-                                            if (filteredDocs.isEmpty) {
-                                              return const Padding(
-                                                padding: EdgeInsets.symmetric(
-                                                    vertical: 40.0),
-                                                child: Center(
-                                                  child: Text(
-                                                    'No appointments found for this view.',
-                                                    style: TextStyle(
-                                                        fontSize: 13,
-                                                        color:
-                                                            Color(0xFF94A3B8),
-                                                        fontStyle:
-                                                            FontStyle.italic),
-                                                  ),
-                                                ),
-                                              );
-                                            }
-
-                                            return Column(
+                                            return TableRow(
                                               children: [
-                                                Table(
-                                                  columnWidths: const {
-                                                    0: FlexColumnWidth(1.2),
-                                                    1: FlexColumnWidth(1.5),
-                                                    2: FlexColumnWidth(1.8),
-                                                    3: FlexColumnWidth(2.0),
-                                                    4: FlexColumnWidth(1.2),
-                                                  },
-                                                  defaultVerticalAlignment:
-                                                      TableCellVerticalAlignment
-                                                          .middle,
+                                                Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      vertical: 14.0),
+                                                  child: Text(petId,
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color: Color(
+                                                              0xFF64748B))),
+                                                ),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
-                                                    const TableRow(
-                                                      children: [
-                                                        _TableHeader('PET ID'),
-                                                        _TableHeader(
-                                                            'PET INFO'),
-                                                        _TableHeader('OWNER'),
-                                                        _TableHeader(
-                                                            'DATE & TIME'),
-                                                        _TableHeader('ACTIONS'),
-                                                      ],
+                                                    Text(petName,
+                                                        style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 13,
+                                                            color: Color(
+                                                                0xFF0F172A))),
+                                                    Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                          color: const Color(
+                                                              0xFFF1F5F9),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(4)),
+                                                      child: Text(species,
+                                                          style: const TextStyle(
+                                                              fontSize: 10,
+                                                              color: Color(
+                                                                  0xFF64748B))),
                                                     ),
-                                                    ...filteredDocs.map((doc) {
-                                                      final data = doc.data()
-                                                          as Map<String,
-                                                              dynamic>;
-
-                                                      final petId =
-                                                          data['petId'] ??
-                                                              'PET-00000';
-                                                      final petName =
-                                                          data['petName'] ??
-                                                              data['name'] ??
-                                                              'Pet';
-                                                      final species =
-                                                          data['species'] ??
-                                                              data['breed'] ??
-                                                              'Dog';
-                                                      final owner =
-                                                          data['ownerName'] ??
-                                                              'Owner';
-                                                      final date =
-                                                          data['date'] ??
-                                                              'August 04, 2026';
-                                                      final time = data[
-                                                              'time'] ??
-                                                          '09:00 AM - 10:00 AM';
-                                                      final service =
-                                                          data['service'] ??
-                                                              'General Checkup';
-
-                                                      return TableRow(
-                                                        children: [
-                                                          Padding(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                                    vertical:
-                                                                        14.0),
-                                                            child: Text(petId,
-                                                                style: const TextStyle(
-                                                                    fontSize:
-                                                                        12,
-                                                                    color: Color(
-                                                                        0xFF64748B))),
-                                                          ),
-                                                          Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Text(petName,
-                                                                  style: const TextStyle(
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                      fontSize:
-                                                                          13,
-                                                                      color: Color(
-                                                                          0xFF0F172A))),
-                                                              Container(
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        6,
-                                                                    vertical:
-                                                                        2),
-                                                                decoration: BoxDecoration(
-                                                                    color: const Color(
-                                                                        0xFFF1F5F9),
-                                                                    borderRadius:
-                                                                        BorderRadius.circular(
-                                                                            4)),
-                                                                child: Text(
-                                                                    species,
-                                                                    style: const TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        color: Color(
-                                                                            0xFF64748B))),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                          Text(owner,
-                                                              style: const TextStyle(
-                                                                  fontSize: 12,
-                                                                  color: Color(
-                                                                      0xFF334155))),
-                                                          Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
-                                                              Text(date,
-                                                                  style: const TextStyle(
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                      fontSize:
-                                                                          12,
-                                                                      color: Color(
-                                                                          0xFF0F172A))),
-                                                              Text(time,
-                                                                  style: const TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      color: Color(
-                                                                          0xFF64748B))),
-                                                              Text(service,
-                                                                  style: const TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      color: Color(
-                                                                          0xFF94A3B8))),
-                                                            ],
-                                                          ),
-                                                          if (_selectedTab ==
-                                                              'Confirmed') ...[
-                                                            ElevatedButton.icon(
-                                                              style:
-                                                                  ElevatedButton
-                                                                      .styleFrom(
-                                                                backgroundColor:
-                                                                    const Color(
-                                                                        0xFF16A34A),
-                                                                foregroundColor:
-                                                                    Colors
-                                                                        .white,
-                                                                padding: const EdgeInsets
-                                                                    .symmetric(
-                                                                    horizontal:
-                                                                        12,
-                                                                    vertical:
-                                                                        8),
-                                                                shape: RoundedRectangleBorder(
-                                                                    borderRadius:
-                                                                        BorderRadius.circular(
-                                                                            8)),
-                                                                elevation: 0,
-                                                              ),
-                                                              onPressed: () {
-                                                                _db
-                                                                    .collection(
-                                                                        'appointments')
-                                                                    .doc(doc.id)
-                                                                    .update({
-                                                                  'status':
-                                                                      'Completed'
-                                                                });
-                                                              },
-                                                              icon: const Icon(
-                                                                  Icons
-                                                                      .check_circle,
-                                                                  size: 14),
-                                                              label: const Text(
-                                                                  'Complete',
-                                                                  style: TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold)),
-                                                            ),
-                                                          ] else if (_selectedTab ==
-                                                              'Pending Requests') ...[
-                                                            Row(
-                                                              children: [
-                                                                IconButton(
-                                                                  icon: const Icon(
-                                                                      Icons
-                                                                          .check_circle,
-                                                                      color: Colors
-                                                                          .green,
-                                                                      size: 20),
-                                                                  onPressed: () => _db
-                                                                      .collection(
-                                                                          'appointments')
-                                                                      .doc(doc
-                                                                          .id)
-                                                                      .update({
-                                                                    'status':
-                                                                        'Confirmed'
-                                                                  }),
-                                                                ),
-                                                                IconButton(
-                                                                  icon: const Icon(
-                                                                      Icons
-                                                                          .cancel,
-                                                                      color: Colors
-                                                                          .red,
-                                                                      size: 20),
-                                                                  onPressed: () => _db
-                                                                      .collection(
-                                                                          'appointments')
-                                                                      .doc(doc
-                                                                          .id)
-                                                                      .update({
-                                                                    'status':
-                                                                        'Cancelled'
-                                                                  }),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ] else ...[
-                                                            const Text(
-                                                                'Completed',
-                                                                style: TextStyle(
-                                                                    fontSize:
-                                                                        11,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .bold,
-                                                                    color: Color(
-                                                                        0xFF16A34A))),
-                                                          ],
-                                                        ],
-                                                      );
-                                                    }),
                                                   ],
                                                 ),
-                                                const SizedBox(height: 16),
-                                                Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: Text(
-                                                    'Showing 1 to ${filteredDocs.length} of ${filteredDocs.length} entries',
+                                                Text(owner,
                                                     style: const TextStyle(
-                                                        fontSize: 11,
+                                                        fontSize: 12,
                                                         color:
-                                                            Color(0xFF94A3B8)),
+                                                            Color(0xFF334155))),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(formattedDate,
+                                                        style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 12,
+                                                            color: Color(
+                                                                0xFF0F172A))),
+                                                    Text(time,
+                                                        style: const TextStyle(
+                                                            fontSize: 11,
+                                                            color: Color(
+                                                                0xFF64748B))),
+                                                  ],
+                                                ),
+                                                Text(
+                                                  service,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: Color(0xFF334155),
                                                   ),
                                                 ),
+                                                if (status.toLowerCase() ==
+                                                    'confirmed') ...[
+                                                  ElevatedButton.icon(
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          const Color(
+                                                              0xFF16A34A),
+                                                      foregroundColor:
+                                                          Colors.white,
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 8),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          8)),
+                                                      elevation: 0,
+                                                    ),
+                                                    onPressed: () {
+                                                      _db
+                                                          .collection(
+                                                              'appointments')
+                                                          .doc(doc.id)
+                                                          .update({
+                                                        'status': 'Completed'
+                                                      });
+                                                    },
+                                                    icon: const Icon(
+                                                        Icons.check_circle,
+                                                        size: 14),
+                                                    label: const Text(
+                                                        'Complete',
+                                                        style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold)),
+                                                  ),
+                                                ] else if (status
+                                                        .toLowerCase() ==
+                                                    'pending') ...[
+                                                  Row(
+                                                    children: [
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                            Icons.check_circle,
+                                                            color: Colors.green,
+                                                            size: 20),
+                                                        onPressed: () => _db
+                                                            .collection(
+                                                                'appointments')
+                                                            .doc(doc.id)
+                                                            .update({
+                                                          'status': 'Confirmed'
+                                                        }),
+                                                      ),
+                                                      IconButton(
+                                                        icon: const Icon(
+                                                            Icons.cancel,
+                                                            color: Colors.red,
+                                                            size: 20),
+                                                        onPressed: () => _db
+                                                            .collection(
+                                                                'appointments')
+                                                            .doc(doc.id)
+                                                            .update({
+                                                          'status': 'Cancelled'
+                                                        }),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ] else ...[
+                                                  Text(
+                                                    status,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color:
+                                                          status.toLowerCase() ==
+                                                                  'completed'
+                                                              ? const Color(
+                                                                  0xFF16A34A)
+                                                              : const Color(
+                                                                  0xFFDC2626),
+                                                    ),
+                                                  ),
+                                                ],
                                               ],
                                             );
-                                          },
+                                          }),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          'Showing 1 to ${filteredDocs.length} of ${filteredDocs.length} entries',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8)),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-
-                                // Right Side: Calendar View Panel
-                                Expanded(
-                                  flex: 3,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(20.0),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16.0),
-                                      border: Border.all(
-                                          color: const Color(0xFFE2E8F0)),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            const Text('Calendar View',
-                                                style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 14,
-                                                    color: Color(0xFF0F172A))),
-                                            PopupMenuButton<String>(
-                                              onSelected: (mode) => setState(
-                                                  () =>
-                                                      _calendarViewMode = mode),
-                                              child: Row(
-                                                children: [
-                                                  Text(
-                                                      'View All ($_calendarViewMode)',
-                                                      style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color: Color(
-                                                              0xFF4F46E5))),
-                                                  const Icon(
-                                                      Icons.arrow_drop_down,
-                                                      size: 16,
-                                                      color: Color(0xFF4F46E5)),
-                                                ],
-                                              ),
-                                              itemBuilder: (context) => const [
-                                                PopupMenuItem(
-                                                    value: 'Monthly',
-                                                    child: Text('Monthly View',
-                                                        style: TextStyle(
-                                                            fontSize: 12))),
-                                                PopupMenuItem(
-                                                    value: 'Weekly',
-                                                    child: Text('Weekly View',
-                                                        style: TextStyle(
-                                                            fontSize: 12))),
-                                                PopupMenuItem(
-                                                    value: 'Daily',
-                                                    child: Text('Daily View',
-                                                        style: TextStyle(
-                                                            fontSize: 12))),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 16),
-
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            const Text('August 2026',
-                                                style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF334155))),
-                                            Row(
-                                              children: const [
-                                                Icon(Icons.chevron_left,
-                                                    size: 18,
-                                                    color: Color(0xFF64748B)),
-                                                Icon(Icons.chevron_right,
-                                                    size: 18,
-                                                    color: Color(0xFF64748B)),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 16),
-
-                                        // Dynamic Calendar View
-                                        _buildMiniCalendarGrid(),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         );
@@ -672,267 +627,72 @@ class _AppointmentManagementScreenState
     );
   }
 
-  // TOP METRIC CARD WIDGET
-  Widget _buildMetricCard(
-      {required String title,
-      required String count,
-      required IconData icon,
-      required Color color,
-      required Color bgColor}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-                color: bgColor, borderRadius: BorderRadius.circular(12)),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF94A3B8),
-                      letterSpacing: 0.5)),
-              const SizedBox(height: 2),
-              Text(count,
-                  style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A))),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // TAB BUTTON WIDGET
-  Widget _buildTabButton(String label) {
-    final isSelected = _selectedTab == label;
+  Widget _buildMetricCard({
+    required String title,
+    required String count,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+    required VoidCallback onTap,
+    required bool isSelected,
+  }) {
     return GestureDetector(
-      onTap: () => setState(() => _selectedTab = label),
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFF64748B),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE2E8F0),
+            width: isSelected ? 2.0 : 1.0,
           ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                      color: color.withOpacity(0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ]
+              : [],
         ),
-      ),
-    );
-  }
-
-  // DYNAMIC CALENDAR GRID BASED ON VIEW MODE (MONTHLY, WEEKLY, DAILY)
-  Widget _buildMiniCalendarGrid() {
-    final days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-    // 1. DAILY VIEW DISPLAY
-    if (_calendarViewMode == 'Daily') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEF2FF),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFC7D2FE)),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: bgColor, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 18),
             ),
-            child: Column(
-              children: const [
-                Text("TODAY'S SCHEDULE",
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF4F46E5))),
-                SizedBox(height: 4),
-                Text('August 04, 2026',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A))),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildTimeSlotItem('09:00 AM', 'Garfield (General Checkup)', true),
-          _buildTimeSlotItem('10:30 AM', 'No Appointment', false),
-          _buildTimeSlotItem('02:00 PM', 'No Appointment', false),
-          _buildTimeSlotItem('03:30 PM', 'No Appointment', false),
-        ],
-      );
-    }
-
-    // 2. WEEKLY VIEW DISPLAY (AUG 02 - AUG 08)
-    if (_calendarViewMode == 'Weekly') {
-      final weekDays = [
-        {'day': 'S', 'num': '2'},
-        {'day': 'M', 'num': '3'},
-        {'day': 'T', 'num': '4', 'isToday': true},
-        {'day': 'W', 'num': '5'},
-        {'day': 'T', 'num': '6'},
-        {'day': 'F', 'num': '7'},
-        {'day': 'S', 'num': '8'},
-      ];
-
-      return Column(
-        children: [
-          const Text('CURRENT WEEK (AUG 02 - AUG 08)',
-              style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF64748B))),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: weekDays.map((w) {
-              final isToday = w['isToday'] == true;
-              return Column(
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(w['day'].toString(),
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF64748B))),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isToday
-                          ? const Color(0xFF4F46E5)
-                          : const Color(0xFFF8FAFC),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: isToday
-                              ? const Color(0xFF4F46E5)
-                              : const Color(0xFFE2E8F0)),
-                    ),
-                    child: Text(
-                      w['num'].toString(),
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isToday ? Colors.white : const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ),
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? color : const Color(0xFF94A3B8),
+                          letterSpacing: 0.3)),
+                  const SizedBox(height: 2),
+                  Text(count,
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
                 ],
-              );
-            }).toList(),
-          ),
-        ],
-      );
-    }
-
-    // 3. MONTHLY VIEW DISPLAY (DEFAULT GRID 1-31)
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: days
-              .map((d) => Text(d,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF64748B))))
-              .toList(),
-        ),
-        const SizedBox(height: 12),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7, mainAxisSpacing: 6, crossAxisSpacing: 6),
-          itemCount: 31,
-          itemBuilder: (context, index) {
-            final dayNum = index + 1;
-            final isToday = dayNum == 4;
-            return Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isToday ? const Color(0xFF4F46E5) : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '$dayNum',
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                    color: isToday ? Colors.white : const Color(0xFF334155)),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  // HELPER FOR DAILY TIME SLOTS
-  Widget _buildTimeSlotItem(String time, String details, bool hasBooking) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 60,
-              child: Text(time,
-                  style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF64748B)))),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: hasBooking
-                    ? const Color(0xFFDCFCE7)
-                    : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                    color: hasBooking
-                        ? const Color(0xFF86EFAC)
-                        : const Color(0xFFE2E8F0)),
-              ),
-              child: Text(
-                details,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: hasBooking ? FontWeight.bold : FontWeight.normal,
-                  color: hasBooking
-                      ? const Color(0xFF166534)
-                      : const Color(0xFF94A3B8),
-                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // Top Header Bar
   Widget _buildTopHeader() {
     return Container(
       height: 64,
@@ -963,17 +723,28 @@ class _AppointmentManagementScreenState
     );
   }
 
-  // SCHEDULE APPOINTMENT DIALOG FORM
   void _showScheduleAppointmentDialog(BuildContext context) {
     String? selectedOwnerName;
     String? selectedOwnerId;
+    String? selectedPetId;
 
     String selectedService = 'General Checkup';
     String selectedDoctor = 'Dr. James Nico Martinez';
-    final dateController = TextEditingController(text: '2026-08-05');
-    String selectedTimeSlot = '09:00 AM - 10:00 AM';
-    final notesController = TextEditingController();
 
+    final dateController = TextEditingController(
+      text: DateTime.now().toString().split(' ')[0],
+    );
+
+    String selectedTimeSlot = '09:00 AM - 10:30 AM';
+    final List<String> clinicTimeSlots = [
+      '09:00 AM - 10:30 AM',
+      '11:00 AM - 12:30 PM',
+      '01:00 PM - 02:30 PM',
+      '03:00 PM - 04:30 PM',
+      '05:00 PM - 06:30 PM',
+    ];
+
+    final notesController = TextEditingController();
     bool isUrgentCase = false;
 
     showDialog(
@@ -1008,15 +779,16 @@ class _AppointmentManagementScreenState
                         ],
                       ),
                       const SizedBox(height: 16),
-                      if (selectedOwnerName != null) ...[
+                      if (selectedOwnerName != null &&
+                          selectedOwnerName!.isNotEmpty) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 12),
                           decoration: BoxDecoration(
-                              color: const Color(0xFFEEF2FF),
-                              borderRadius: BorderRadius.circular(12),
-                              border:
-                                  Border.all(color: const Color(0xFFC7D2FE))),
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFC7D2FE)),
+                          ),
                           child: Row(
                             children: [
                               const Icon(Icons.person_outline,
@@ -1031,8 +803,11 @@ class _AppointmentManagementScreenState
                                         color: Color(0xFF0F172A))),
                               ),
                               GestureDetector(
-                                onTap: () => setDialogState(
-                                    () => selectedOwnerName = null),
+                                onTap: () => setDialogState(() {
+                                  selectedOwnerName = null;
+                                  selectedOwnerId = null;
+                                  selectedPetId = null;
+                                }),
                                 child: const Text('Change',
                                     style: TextStyle(
                                         fontSize: 12,
@@ -1062,8 +837,8 @@ class _AppointmentManagementScreenState
 
                             return DropdownButtonFormField<String>(
                               decoration: _buildInputDecoration(
-                                  labelText: 'SEARCH OWNER (NAME OR ID)*',
-                                  hintText: 'Type owner name or ID...'),
+                                  labelText: 'PET OWNER*',
+                                  hintText: 'Search owner name or ID...'),
                               items: ownerOptions.map((o) {
                                 return DropdownMenuItem(
                                     value: o['name'],
@@ -1078,6 +853,7 @@ class _AppointmentManagementScreenState
                                 setDialogState(() {
                                   selectedOwnerName = match['name'];
                                   selectedOwnerId = match['ownerId'];
+                                  selectedPetId = null;
                                 });
                               },
                             );
@@ -1085,29 +861,235 @@ class _AppointmentManagementScreenState
                         ),
                       ],
                       const SizedBox(height: 16),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isUrgentCase
-                              ? const Color(0xFFFEF2F2)
-                              : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: isUrgentCase
-                                  ? const Color(0xFFFCA5A5)
-                                  : const Color(0xFFE2E8F0)),
+                      if (selectedOwnerName == null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            children: const [
+                              Icon(Icons.info_outline,
+                                  size: 16, color: Color(0xFF64748B)),
+                              SizedBox(width: 8),
+                              Text(
+                                  'Please select an owner above first to view their pets.',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Color(0xFF64748B))),
+                            ],
+                          ),
                         ),
-                        child: CheckboxListTile(
-                          value: isUrgentCase,
-                          activeColor: const Color(0xFFDC2626),
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          title: const Text('MARK AS URGENT / EMERGENCY CASE',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFDC2626))),
-                          onChanged: (val) =>
-                              setDialogState(() => isUrgentCase = val ?? false),
+                      ] else ...[
+                        StreamBuilder<QuerySnapshot>(
+                          stream: _db.collection('pets').snapshots(),
+                          builder: (context, snapshot) {
+                            List<Map<String, String>> petList = [];
+                            if (snapshot.hasData) {
+                              petList = snapshot.data!.docs.where((doc) {
+                                final pData =
+                                    doc.data() as Map<String, dynamic>;
+                                final pOwner = (pData['fullName'] ??
+                                        pData['ownerName'] ??
+                                        pData['owner'] ??
+                                        '')
+                                    .toString()
+                                    .toLowerCase();
+                                final pOwnerId =
+                                    (pData['ownerId'] ?? '').toString();
+                                return pOwner ==
+                                        selectedOwnerName!.toLowerCase() ||
+                                    (selectedOwnerId!.isNotEmpty &&
+                                        pOwnerId == selectedOwnerId);
+                              }).map((doc) {
+                                final pData =
+                                    doc.data() as Map<String, dynamic>;
+                                return {
+                                  'petName': (pData['name'] ??
+                                          pData['petName'] ??
+                                          'Pet')
+                                      .toString(),
+                                  'petId':
+                                      (pData['petId'] ?? doc.id).toString(),
+                                  'breed':
+                                      (pData['breed'] ?? pData['species'] ?? '')
+                                          .toString(),
+                                };
+                              }).toList();
+                            }
+
+                            return DropdownButtonFormField<String>(
+                              value: selectedPetId,
+                              decoration: _buildInputDecoration(
+                                  labelText: 'SELECT PET PATIENT*',
+                                  hintText: petList.isEmpty
+                                      ? 'No pets registered'
+                                      : 'Select pet...'),
+                              items: petList.map((p) {
+                                return DropdownMenuItem(
+                                    value: p['petId'],
+                                    child: Text(
+                                        '${p['petName']} (${p['breed']})',
+                                        style: const TextStyle(fontSize: 13)));
+                              }).toList(),
+                              onChanged: petList.isEmpty
+                                  ? null
+                                  : (val) =>
+                                      setDialogState(() => selectedPetId = val),
+                            );
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedService,
+                              decoration:
+                                  _buildInputDecoration(labelText: 'SERVICE*'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'General Checkup',
+                                    child: Text('General Checkup',
+                                        style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(
+                                    value: 'Vaccination',
+                                    child: Text('Vaccination',
+                                        style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(
+                                    value: 'Surgery',
+                                    child: Text('Surgery',
+                                        style: TextStyle(fontSize: 13))),
+                              ],
+                              onChanged: (val) =>
+                                  setDialogState(() => selectedService = val!),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedDoctor,
+                              decoration: _buildInputDecoration(
+                                  labelText: 'ASSIGNED DOCTOR*'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'Dr. James Nico Martinez',
+                                    child: Text('Dr. James Nico Martinez',
+                                        style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(
+                                    value: 'Dr. Tamesis',
+                                    child: Text('Dr. Tamesis',
+                                        style: TextStyle(fontSize: 13))),
+                              ],
+                              onChanged: (val) =>
+                                  setDialogState(() => selectedDoctor = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: dateController,
+                              readOnly: true,
+                              style: const TextStyle(fontSize: 13),
+                              onTap: () async {
+                                final DateTime? pickedDate =
+                                    await showDatePicker(
+                                  context: context,
+                                  initialDate: DateTime.now(),
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime(2030),
+                                );
+                                if (pickedDate != null) {
+                                  final formattedDate =
+                                      pickedDate.toString().split(' ')[0];
+                                  setDialogState(() {
+                                    dateController.text = formattedDate;
+                                  });
+                                }
+                              },
+                              decoration: _buildInputDecoration(
+                                labelText: 'APPOINTMENT DATE*',
+                                suffixIcon: const Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 18,
+                                    color: Color(0xFF64748B)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value: selectedTimeSlot,
+                              decoration: _buildInputDecoration(
+                                  labelText: 'TIME SLOT*'),
+                              items: clinicTimeSlots.map((slot) {
+                                return DropdownMenuItem(
+                                    value: slot,
+                                    child: Text(slot,
+                                        style: const TextStyle(fontSize: 12)));
+                              }).toList(),
+                              onChanged: (val) =>
+                                  setDialogState(() => selectedTimeSlot = val!),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                size: 20, color: Color(0xFFDC2626)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'MARK AS URGENT / EMERGENCY CASE',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFDC2626),
+                                        letterSpacing: 0.3),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Prioritizes this walk-in patient in clinic queue',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Checkbox(
+                              value: isUrgentCase,
+                              activeColor: const Color(0xFFDC2626),
+                              onChanged: (val) => setDialogState(
+                                  () => isUrgentCase = val ?? false),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: notesController,
+                        maxLines: 3,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: _buildInputDecoration(
+                          labelText: 'NOTES / SPECIAL REQUESTS',
+                          hintText: 'Add medical notes or specific requests...',
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -1115,31 +1097,52 @@ class _AppointmentManagementScreenState
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel')),
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF64748B))),
+                          ),
                           const SizedBox(width: 12),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0F172A),
-                                foregroundColor: Colors.white),
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              elevation: 0,
+                            ),
                             onPressed: () async {
                               if (selectedOwnerName != null) {
                                 await _db.collection('appointments').add({
                                   'ownerName': selectedOwnerName,
                                   'ownerId': selectedOwnerId,
+                                  'petId': selectedPetId ?? 'PET-00000',
                                   'service': selectedService,
                                   'doctor': selectedDoctor,
                                   'date': dateController.text,
                                   'time': selectedTimeSlot,
                                   'notes': notesController.text,
                                   'isUrgent': isUrgentCase,
+                                  'priority': isUrgentCase ? 'High' : 'Normal',
                                   'status': 'Confirmed',
                                   'createdAt': FieldValue.serverTimestamp(),
                                 });
+
                                 Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Appointment booked successfully!')),
+                                );
                               }
                             },
-                            child: const Text('Book Appointment'),
+                            child: const Text('Book Appointment',
+                                style: TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -1154,13 +1157,19 @@ class _AppointmentManagementScreenState
     );
   }
 
-  InputDecoration _buildInputDecoration({String? labelText, String? hintText}) {
+  InputDecoration _buildInputDecoration(
+      {String? labelText, String? hintText, Widget? suffixIcon}) {
     return InputDecoration(
       labelText: labelText,
       labelStyle: const TextStyle(
-          fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF64748B),
+          letterSpacing: 0.5),
       floatingLabelBehavior: FloatingLabelBehavior.always,
       hintText: hintText,
+      hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+      suffixIcon: suffixIcon,
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1170,6 +1179,9 @@ class _AppointmentManagementScreenState
       enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
     );
   }
 }
