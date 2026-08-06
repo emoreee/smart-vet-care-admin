@@ -33,7 +33,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     super.dispose();
   }
 
-  // Doctor-Restricted New Intake Modal Launcher
+  // Doctor-Restricted New Admission Modal Launcher
   void _openNewIntakeModal() {
     if (_currentUserRole != 'Doctor') {
       showDialog(
@@ -50,7 +50,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
             ],
           ),
           content: const Text(
-            'Only licensed veterinarians/doctors are authorized to perform patient intake and initial medical assessment.',
+            'Only licensed veterinarians/doctors are authorized to perform patient admission and initial medical assessment.',
             style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
           ),
           actions: [
@@ -69,7 +69,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     showDialog(
       context: context,
       builder: (context) =>
-          NewPatientIntakeModal(doctorName: _currentDoctorName),
+          NewPatientIntakeModal(defaultDoctorName: _currentDoctorName),
     );
   }
 
@@ -90,7 +90,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Health Intake Activity Log',
+                  const Text('Health Admission Activity Log',
                       style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -135,7 +135,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text("New Intake: $petName ($breed)",
+                                  Text("New Admission: $petName ($breed)",
                                       style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 13,
@@ -182,7 +182,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                     builder: (context, snapshot) {
                       final docs = snapshot.data?.docs ?? [];
 
-                      // STATS CALCULATIONS
                       int activeCount = 0;
                       int criticalCount = 0;
                       int dischargedTodayCount = 0;
@@ -204,7 +203,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                         }
                       }
 
-                      // Search Filter
                       final filteredDocs = docs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final petName =
@@ -282,7 +280,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                       onPressed: _openNewIntakeModal,
                                       icon: const Icon(Icons.add,
                                           size: 18, color: Colors.white),
-                                      label: const Text('+ New Intake',
+                                      label: const Text('+ Patient Admission',
                                           style: TextStyle(
                                               color: Colors.white,
                                               fontSize: 13,
@@ -341,7 +339,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Left Table Area (Patient Registry)
                                 Expanded(
                                   flex: 3,
                                   child: Container(
@@ -356,7 +353,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        // Header Bar with TOTAL BADGE & Search
                                         Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
@@ -398,8 +394,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                                 ),
                                               ],
                                             ),
-
-                                            // Search Input
                                             Container(
                                               width: 260,
                                               height: 38,
@@ -435,17 +429,14 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 20),
-
-                                        // PATIENT REGISTRY TABLE
                                         Table(
                                           columnWidths: const {
-                                            0: FlexColumnWidth(1.2), // PET ID
-                                            1: FlexColumnWidth(1.6), // PET NAME
-                                            2: FlexColumnWidth(
-                                                2.0), // OWNER'S NAME
-                                            3: FlexColumnWidth(1.8), // BREED
-                                            4: FlexColumnWidth(1.4), // STATUS
-                                            5: FlexColumnWidth(1.0), // ACTIONS
+                                            0: FlexColumnWidth(1.2),
+                                            1: FlexColumnWidth(1.6),
+                                            2: FlexColumnWidth(2.0),
+                                            3: FlexColumnWidth(1.8),
+                                            4: FlexColumnWidth(1.4),
+                                            5: FlexColumnWidth(1.0),
                                           },
                                           defaultVerticalAlignment:
                                               TableCellVerticalAlignment.middle,
@@ -464,7 +455,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                               _buildRow(doc),
                                           ],
                                         ),
-
                                         if (filteredDocs.isEmpty)
                                           const Padding(
                                             padding: EdgeInsets.symmetric(
@@ -477,10 +467,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                                       fontSize: 13)),
                                             ),
                                           ),
-
                                         const SizedBox(height: 24),
-
-                                        // Dynamic Pagination Display
                                         Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
@@ -516,8 +503,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 24),
-
-                                // Right Area (Recent Activity Only)
                                 Expanded(
                                   flex: 1,
                                   child: Container(
@@ -540,8 +525,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                               color: Color(0xFF0F172A)),
                                         ),
                                         const SizedBox(height: 16),
-
-                                        // Dynamic List from DB
                                         if (docs.isEmpty)
                                           const Padding(
                                             padding: EdgeInsets.symmetric(
@@ -633,7 +616,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                                                 .start,
                                                         children: [
                                                           Text(
-                                                            'New Intake: "$petName"',
+                                                            'Admission: "$petName"',
                                                             style: const TextStyle(
                                                                 fontSize: 12,
                                                                 fontWeight:
@@ -659,7 +642,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                               );
                                             }).toList(),
                                           ),
-
                                         const SizedBox(height: 12),
                                         SizedBox(
                                           width: double.infinity,
@@ -748,16 +730,15 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     );
   }
 
-  // Plain Colored Text Status
   Widget _buildStatusBadge(String status) {
-    Color textColor = const Color(0xFF16A34A); // Green for STABLE
+    Color textColor = const Color(0xFF16A34A);
 
     if (status == 'URGENT' || status == 'CRITICAL') {
-      textColor = const Color(0xFFDC2626); // Red
+      textColor = const Color(0xFFDC2626);
     } else if (status == 'RECOVERED') {
-      textColor = const Color(0xFF0D9488); // Teal
+      textColor = const Color(0xFF0D9488);
     } else if (status == 'OBSERVATION') {
-      textColor = const Color(0xFFD97706); // Amber
+      textColor = const Color(0xFFD97706);
     }
 
     return Text(
@@ -773,11 +754,11 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
 }
 
 // ==========================================
-// NEW PATIENT INTAKE MODAL (Fixed & Overflow-Free)
+// NEW PATIENT ADMISSION MODAL (Normal 100% Dark Text on Input, Light Hint)
 // ==========================================
 class NewPatientIntakeModal extends StatefulWidget {
-  final String doctorName;
-  const NewPatientIntakeModal({super.key, required this.doctorName});
+  final String defaultDoctorName;
+  const NewPatientIntakeModal({super.key, required this.defaultDoctorName});
 
   @override
   State<NewPatientIntakeModal> createState() => _NewPatientIntakeModalState();
@@ -795,21 +776,29 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
   String? _selectedPetName;
   String? _selectedBreed;
 
+  String _selectedService = 'General Checkup';
+  late String _selectedDoctor;
+
+  // Controllers with normal 100% dark text style when typing or pre-filled
   final TextEditingController _chiefComplaintController =
-      TextEditingController();
+      TextEditingController(text: 'Severe vomiting and dehydration');
   final TextEditingController _locationBayController =
       TextEditingController(text: 'Recovery Bay A1');
   final TextEditingController _tempController =
       TextEditingController(text: '38.5');
   final TextEditingController _heartRateController =
       TextEditingController(text: '110');
-  final TextEditingController _respRateController =
-      TextEditingController(text: '24');
   final TextEditingController _weightController =
       TextEditingController(text: '12.5');
 
   String _selectedStatus = 'STABLE';
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDoctor = widget.defaultDoctorName;
+  }
 
   InputDecoration _inputDeco(String label, {String? hint}) {
     return InputDecoration(
@@ -817,17 +806,21 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
       hintText: hint,
       labelStyle: const TextStyle(
           fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+      hintStyle: const TextStyle(
+          fontSize: 12,
+          color: Color(0x9994A3B8), // Standard light gray hint
+          fontWeight: FontWeight.normal),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
       focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
     );
   }
@@ -859,7 +852,8 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
           'ownerDocId': _selectedOwnerDocId,
           'ownerId': _selectedOwnerId ?? '#OWN-00001',
           'ownerName': _selectedOwnerName ?? 'Owner',
-          'doctorName': widget.doctorName,
+          'doctorName': _selectedDoctor,
+          'service': _selectedService,
           'chiefComplaint': _chiefComplaintController.text.trim(),
           'locationBay': _locationBayController.text.trim(),
           'status': _selectedStatus,
@@ -868,7 +862,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
           'vitals': {
             'temperature': double.tryParse(_tempController.text.trim()) ?? 38.5,
             'heartRate': int.tryParse(_heartRateController.text.trim()) ?? 110,
-            'respRate': int.tryParse(_respRateController.text.trim()) ?? 24,
             'weight': double.tryParse(_weightController.text.trim()) ?? 12.5,
           },
         });
@@ -877,7 +870,7 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Patient intake recorded successfully!'),
+                content: Text('Patient admission recorded successfully!'),
                 backgroundColor: Color(0xFF166534)),
           );
         }
@@ -893,14 +886,21 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
 
   @override
   Widget build(BuildContext context) {
+    // Normal 100% dark solid text style for admin input and dropdowns
+    const TextStyle normalInputTextStyle = TextStyle(
+      fontSize: 13,
+      color: Color(0xFF0F172A), // 100% dark solid text
+      fontWeight: FontWeight.normal,
+    );
+
     return Dialog(
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 520,
+        width: 600,
         constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85),
-        padding: const EdgeInsets.all(28),
+            maxHeight: MediaQuery.of(context).size.height * 0.90),
+        padding: const EdgeInsets.all(32),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -911,27 +911,28 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('New Patient Intake',
-                            style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A))),
-                        Text("Attending Vet: ${widget.doctorName}",
-                            style: const TextStyle(
-                                fontSize: 11, color: Color(0xFF64748B))),
-                      ],
-                    ),
+                    const Text('Patient Admission & Confinement',
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A))),
                     IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => Navigator.pop(context)),
+                      icon: const Icon(Icons.close,
+                          size: 20, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.pop(context),
+                      splashRadius: 20,
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                // Owner Search
+                // 1. PET OWNER CONTAINER
+                const Text('PET OWNER*',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF475569))),
+                const SizedBox(height: 6),
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('users')
@@ -939,14 +940,55 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                   builder: (context, userSnap) {
                     final users = userSnap.data?.docs ?? [];
 
+                    if (_selectedOwnerDocId != null) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.person_outline,
+                                    size: 18, color: Color(0xFF4F46E5)),
+                                const SizedBox(width: 10),
+                                Text("$_selectedOwnerName ($_selectedOwnerId)",
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF312E81))),
+                              ],
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _selectedOwnerDocId = null;
+                                _selectedPetDocId = null;
+                              }),
+                              child: const Text('Change',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF4F46E5))),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
                     return Autocomplete<QueryDocumentSnapshot>(
                       displayStringForOption: (doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         return "${data['fullName']} (${data['ownerID'] ?? data['ownerId'] ?? ''})";
                       },
                       optionsBuilder: (textVal) {
-                        if (textVal.text.trim().isEmpty)
+                        if (textVal.text.trim().isEmpty) {
                           return const Iterable<QueryDocumentSnapshot>.empty();
+                        }
                         final q = textVal.text.toLowerCase();
                         return users.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
@@ -976,8 +1018,9 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                         return TextFormField(
                           controller: controller,
                           focusNode: focusNode,
-                          decoration: _inputDeco('SEARCH OWNER*',
-                              hint: 'Type owner name...'),
+                          style: normalInputTextStyle,
+                          decoration: _inputDeco('SEARCH OWNER',
+                              hint: 'Type owner name or ID...'),
                           validator: (v) => _selectedOwnerDocId == null
                               ? 'Please select owner'
                               : null,
@@ -986,10 +1029,16 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                     );
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
-                // Pet Dropdown (Safely mapping using Document ID String)
-                if (_selectedOwnerDocId != null)
+                // 2. SELECTED PATIENT CONTAINER
+                if (_selectedOwnerDocId != null) ...[
+                  const Text('SELECTED PATIENT*',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF475569))),
+                  const SizedBox(height: 6),
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('pets')
@@ -998,15 +1047,56 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                     builder: (context, petSnap) {
                       final pets = petSnap.data?.docs ?? [];
 
+                      if (_selectedPetDocId != null) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(_selectedPetName ?? 'Pet',
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white)),
+                                  const SizedBox(width: 8),
+                                  Text("$_selectedPetId • $_selectedOwnerName",
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF94A3B8))),
+                                ],
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close,
+                                    size: 16, color: Colors.white),
+                                onPressed: () => setState(() {
+                                  _selectedPetDocId = null;
+                                }),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
                       return DropdownButtonFormField<String>(
                         value: _selectedPetDocId,
-                        decoration: _inputDeco('SELECT PATIENT PET*'),
+                        style: normalInputTextStyle,
+                        decoration: _inputDeco('SELECT PATIENT PET'),
+                        hint: const Text('Select a pet...',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF94A3B8))),
                         items: pets.map((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           return DropdownMenuItem<String>(
                             value: doc.id,
                             child: Text("${data['petName']} (${data['petId']})",
-                                style: const TextStyle(fontSize: 12)),
+                                style: normalInputTextStyle),
                           );
                         }).toList(),
                         onChanged: (docId) {
@@ -1029,86 +1119,141 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                       );
                     },
                   ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+                ],
 
+                // 3. SERVICES & DOCTOR ROW
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedService,
+                        style: normalInputTextStyle,
+                        decoration: _inputDeco('SERVICE*'),
+                        items: ['General Checkup', 'Vaccination', 'Surgery']
+                            .map((e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e, style: normalInputTextStyle)))
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedService = val!),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedDoctor,
+                        style: normalInputTextStyle,
+                        decoration: _inputDeco('ASSIGNED DOCTOR*'),
+                        items: [widget.defaultDoctorName]
+                            .map((e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e, style: normalInputTextStyle)))
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedDoctor = val!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 4. CHIEF COMPLAINT / REASON
                 TextFormField(
                   controller: _chiefComplaintController,
+                  style: normalInputTextStyle,
                   decoration: _inputDeco('CHIEF COMPLAINT / REASON*',
-                      hint: 'e.g. Routine post-surgery monitoring'),
+                      hint: 'e.g. Severe vomiting and dehydration'),
                   validator: (v) =>
                       (v == null || v.isEmpty) ? 'Required' : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
 
+                // 5. STATUS & WARD LOCATION ROW
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: _selectedStatus,
+                        style: normalInputTextStyle,
                         decoration: _inputDeco('INITIAL STATUS*'),
                         items: ['STABLE', 'OBSERVATION', 'URGENT', 'CRITICAL']
                             .map((e) => DropdownMenuItem(
                                 value: e,
-                                child: Text(e,
-                                    style: const TextStyle(fontSize: 12))))
+                                child: Text(e, style: normalInputTextStyle)))
                             .toList(),
                         onChanged: (val) =>
                             setState(() => _selectedStatus = val!),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: TextFormField(
                         controller: _locationBayController,
+                        style: normalInputTextStyle,
                         decoration: _inputDeco('BAY / WARD LOCATION*'),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 20),
 
-                const Text('INITIAL VITALS',
+                const Text('INITIAL PATIENT VITALS',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF475569))),
-                const SizedBox(height: 6),
+                        color: Color(0xFF475569),
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 8),
+
+                // 6. VITALS ROW
                 Row(
                   children: [
                     Expanded(
                         child: TextFormField(
                             controller: _tempController,
+                            style: normalInputTextStyle,
                             decoration: _inputDeco('Temp (°C)'))),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Expanded(
                         child: TextFormField(
                             controller: _heartRateController,
+                            style: normalInputTextStyle,
                             decoration: _inputDeco('Heart Rate'))),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Expanded(
                         child: TextFormField(
                             controller: _weightController,
+                            style: normalInputTextStyle,
                             decoration: _inputDeco('Weight (kg)'))),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 32),
 
+                // 7. FOOTER ACTION BUTTONS
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
                         onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        ),
                         child: const Text('Cancel',
-                            style: TextStyle(color: Color(0xFF64748B)))),
-                    const SizedBox(width: 8),
+                            style: TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.bold))),
+                    const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: _isSaving ? null : _saveIntake,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F172A),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
+                            horizontal: 24, vertical: 14),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
+                            borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
                       ),
                       child: _isSaving
                           ? const SizedBox(
@@ -1116,11 +1261,11 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
                               height: 16,
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
-                          : const Text('Record Intake',
+                          : const Text('Record Admission',
                               style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12)),
+                                  fontSize: 13)),
                     ),
                   ],
                 ),
