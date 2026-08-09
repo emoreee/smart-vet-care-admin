@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'sidebar.dart';
 import 'user_account.dart';
+import 'pet_profile.dart'; // Idagdag ito kasama ng ibang imports
 
 class PetManagementScreen extends StatefulWidget {
   const PetManagementScreen({super.key});
@@ -321,7 +322,20 @@ class _PetManagementScreenState extends State<PetManagementScreen> {
                                                       BorderRadius.circular(
                                                           12)),
                                               onSelected: (val) {
-                                                if (val == 'toggle_status') {
+                                                if (val == 'view_profile') {
+                                                  // PUNTA SA PET PROFILE SCREEN DALA ANG PET NAME AT PET ID
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          PetProfileScreen(
+                                                        petName: name,
+                                                        petId: petId,
+                                                      ),
+                                                    ),
+                                                  );
+                                                } else if (val ==
+                                                    'toggle_status') {
                                                   final currentStatusStr =
                                                       status
                                                           .toString()
@@ -341,6 +355,23 @@ class _PetManagementScreenState extends State<PetManagementScreen> {
                                                 }
                                               },
                                               itemBuilder: (context) => [
+                                                const PopupMenuItem(
+                                                  value: 'view_profile',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                          Icons
+                                                              .visibility_outlined,
+                                                          size: 16,
+                                                          color: Color(
+                                                              0xFF0F172A)),
+                                                      SizedBox(width: 8),
+                                                      Text('View Profile',
+                                                          style: TextStyle(
+                                                              fontSize: 12)),
+                                                    ],
+                                                  ),
+                                                ),
                                                 PopupMenuItem(
                                                   value: 'toggle_status',
                                                   child: Row(

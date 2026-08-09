@@ -731,6 +731,11 @@ class _AppointmentManagementScreenState
     String selectedService = 'General Checkup';
     String selectedDoctor = 'Dr. James Nico Martinez';
 
+    // Dynamic fields based on service selection
+    final chiefComplaintController = TextEditingController();
+    String selectedVaccineType = 'Anti-Rabies Vaccine';
+    final groomingNotesController = TextEditingController();
+
     final dateController = TextEditingController(
       text: DateTime.now().toString().split(' ')[0],
     );
@@ -960,6 +965,10 @@ class _AppointmentManagementScreenState
                                     value: 'Surgery',
                                     child: Text('Surgery',
                                         style: TextStyle(fontSize: 13))),
+                                DropdownMenuItem(
+                                    value: 'Grooming',
+                                    child: Text('Grooming',
+                                        style: TextStyle(fontSize: 13))),
                               ],
                               onChanged: (val) =>
                                   setDialogState(() => selectedService = val!),
@@ -988,6 +997,72 @@ class _AppointmentManagementScreenState
                         ],
                       ),
                       const SizedBox(height: 16),
+
+                      // DYNAMIC FIELDS BASED ON SELECTED SERVICE
+                      if (selectedService == 'General Checkup' ||
+                          selectedService == 'Surgery') ...[
+                        TextField(
+                          controller: chiefComplaintController,
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: _buildInputDecoration(
+                            labelText: 'CHIEF COMPLAINT*',
+                            hintText: 'Enter reason for checkup or surgery...',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ] else if (selectedService == 'Vaccination') ...[
+                        DropdownButtonFormField<String>(
+                          value: selectedVaccineType,
+                          isExpanded: true,
+                          decoration: _buildInputDecoration(
+                              labelText: 'WHAT TYPE OF VACCINE*'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'Anti-Rabies Vaccine',
+                              child: Text('Anti-Rabies Vaccine',
+                                  style: TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            DropdownMenuItem(
+                              value: '5-in-1 Vaccine (DHPPiL / DHLPP)',
+                              child: Text(
+                                  '5-in-1 Vaccine (DHPPiL / DHLPP) - Distemper, Hepatitis, Parvovirus',
+                                  style: TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            DropdownMenuItem(
+                              value: '4-in-1 Vaccine (FVRCP / Feline Tri-Cat)',
+                              child: Text(
+                                  '4-in-1 Vaccine (FVRCP / Feline Tri-Cat) - Rhinotracheitis, Calicivirus',
+                                  style: TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            DropdownMenuItem(
+                              value: 'Feline Leukemia Vaccine (FeLV)',
+                              child: Text('Feline Leukemia Vaccine (FeLV)',
+                                  style: TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                          ],
+                          onChanged: (val) =>
+                              setDialogState(() => selectedVaccineType = val!),
+                        ),
+                        const SizedBox(height: 16),
+                      ] else if (selectedService == 'Grooming') ...[
+                        TextField(
+                          controller: groomingNotesController,
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: _buildInputDecoration(
+                            labelText: 'SPECIAL INSTRUCTIONS / ALLERGIES',
+                            hintText:
+                                'Add special care instructions or product allergies...',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
                       Row(
                         children: [
                           Expanded(
@@ -1085,7 +1160,7 @@ class _AppointmentManagementScreenState
                       const SizedBox(height: 16),
                       TextField(
                         controller: notesController,
-                        maxLines: 3,
+                        maxLines: 2,
                         style: const TextStyle(fontSize: 13),
                         decoration: _buildInputDecoration(
                           labelText: 'NOTES / SPECIAL REQUESTS',
@@ -1116,7 +1191,25 @@ class _AppointmentManagementScreenState
                               elevation: 0,
                             ),
                             onPressed: () async {
-                              if (selectedOwnerName != null) {
+                              if (selectedOwnerName != null &&
+                                  selectedPetId != null) {
+                                String serviceSpecificDetails = '';
+                                if (selectedService == 'General Checkup' ||
+                                    selectedService == 'Surgery') {
+                                  serviceSpecificDetails =
+                                      'Chief Complaint: ${chiefComplaintController.text}';
+                                } else if (selectedService == 'Vaccination') {
+                                  serviceSpecificDetails =
+                                      'Vaccine Type: $selectedVaccineType';
+                                } else if (selectedService == 'Grooming') {
+                                  serviceSpecificDetails =
+                                      'Instructions/Allergies: ${groomingNotesController.text}';
+                                }
+
+                                final finalNotes = notesController.text.isEmpty
+                                    ? serviceSpecificDetails
+                                    : '${notesController.text} | $serviceSpecificDetails';
+
                                 await _db.collection('appointments').add({
                                   'ownerName': selectedOwnerName,
                                   'ownerId': selectedOwnerId,
@@ -1125,7 +1218,7 @@ class _AppointmentManagementScreenState
                                   'doctor': selectedDoctor,
                                   'date': dateController.text,
                                   'time': selectedTimeSlot,
-                                  'notes': notesController.text,
+                                  'notes': finalNotes,
                                   'isUrgent': isUrgentCase,
                                   'priority': isUrgentCase ? 'High' : 'Normal',
                                   'status': 'Confirmed',
@@ -1137,6 +1230,12 @@ class _AppointmentManagementScreenState
                                   const SnackBar(
                                       content: Text(
                                           'Appointment booked successfully!')),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please select an owner and a pet first.')),
                                 );
                               }
                             },
