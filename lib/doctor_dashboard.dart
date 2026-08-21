@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'admin_dashboard.dart';
+import 'doctor_patient_directory.dart';
 
 class DoctorDashboardScreen extends StatefulWidget {
   const DoctorDashboardScreen({super.key});
@@ -116,7 +117,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                         _buildNextPatientCard(),
                         const SizedBox(height: 24),
 
-                        // 3.) RECENT LAB RESULTS CARD (PLACEHOLDERS REMOVED)
+                        // 3.) RECENT LAB RESULTS CARD
                         _buildRecentLabResultsCard(),
                       ],
                     ),
@@ -163,15 +164,30 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           ),
           const SizedBox(height: 16),
           _buildSidebarNavItem(
+              context: context,
               icon: Icons.dashboard_outlined,
               label: 'Main Dashboard',
-              isActive: true),
+              isActive: true,
+              onTap: () {}),
           _buildSidebarNavItem(
+              context: context,
               icon: Icons.pets_outlined,
               label: 'Patient Directory',
-              isActive: false),
+              isActive: false,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DoctorPatientDirectoryScreen(),
+                  ),
+                );
+              }),
           _buildSidebarNavItem(
-              icon: Icons.mail_outline, label: 'Messages', isActive: false),
+              context: context,
+              icon: Icons.mail_outline,
+              label: 'Messages',
+              isActive: false,
+              onTap: () {}),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -179,8 +195,12 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
               onTap: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(
-                      builder: (context) => const AdminDashboardScreen()),
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation1, animation2) =>
+                        const DoctorPatientDirectoryScreen(),
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                  ),
                 );
               },
               borderRadius: BorderRadius.circular(12),
@@ -233,26 +253,42 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
   }
 
   Widget _buildSidebarNavItem(
-      {required IconData icon, required String label, required bool isActive}) {
+      {required BuildContext context,
+      required IconData icon,
+      required String label,
+      required bool isActive,
+      required VoidCallback onTap}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         color: isActive ? const Color(0xFF1E293B) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: ListTile(
-        leading: Icon(icon,
-            color: isActive ? Colors.white : const Color(0xFF94A3B8), size: 18),
-        title: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : const Color(0xFF94A3B8),
-            fontSize: 13,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Icon(icon,
+                    color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                    size: 18),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                    fontSize: 13,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       ),
     );
   }
@@ -318,13 +354,11 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // CLICKABLE TOP STAT CARDS CONNECTED TO FIRESTORE
   Widget _buildStatCardsRow() {
     final todayStr = DateTime.now().toString().split(' ')[0];
 
     return Row(
       children: [
-        // 1. PATIENTS TODAY
         StreamBuilder<QuerySnapshot>(
           stream: _db.collection('appointments').snapshots(),
           builder: (context, snapshot) {
@@ -358,8 +392,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           },
         ),
         const SizedBox(width: 16),
-
-        // 2. PENDING LAB RESULTS
         StreamBuilder<QuerySnapshot>(
           stream: _db.collection('health_monitoring').snapshots(),
           builder: (context, snapshot) {
@@ -390,8 +422,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           },
         ),
         const SizedBox(width: 16),
-
-        // 3. URGENT CONSULTATIONS (EXACTLY MATCHING ADMIN DASHBOARD DHERON)
         StreamBuilder<QuerySnapshot>(
           stream: _db.collection('appointments').snapshots(),
           builder: (context, snapshot) {
@@ -454,18 +484,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   : const Color(0xFFE2E8F0),
               width: isSelected ? 2.2 : 1.0,
             ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: (isUrgent
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFF0F172A))
-                          .withOpacity(0.12),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    )
-                  ]
-                : [],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -530,7 +548,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // NEXT PATIENT CARD WITH DYNAMIC PET NAME RESOLVER
   Widget _buildNextPatientCard() {
     final todayStr = DateTime.now().toString().split(' ')[0];
 
@@ -570,6 +587,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
         final time = data['time'] ?? '09:00 AM - 10:30 AM';
         final note = data['notes'] ?? 'No prior medical notes';
         final isUrgent = data['isUrgent'] ?? false;
+        final petId = data['petId'];
 
         return FutureBuilder<String>(
           future: _resolvePetName(data),
@@ -680,8 +698,8 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                     label: const Text('Start Consultation',
                         style: TextStyle(
                             fontSize: 12, fontWeight: FontWeight.bold)),
-                    onPressed: () =>
-                        _showStartConsultationDialog(context, data, petName),
+                    onPressed: () => _showStartConsultationDialog(
+                        context, data, petName, petId),
                   ),
                 ],
               ),
@@ -750,7 +768,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // RECENT LAB RESULTS CARD (CLEAN & NO PLACEHOLDERS)
   Widget _buildRecentLabResultsCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -882,9 +899,9 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
     );
   }
 
-  // POPUP DIALOG WHEN PRESSING 'START CONSULTATION' (EXPANDABLE TEXTFIELDS)
-  void _showStartConsultationDialog(
-      BuildContext context, Map<String, dynamic> data, String petName) {
+  // START CONSULTATION DIALOG WITH REAL-TIME VITAL SIGNS FETCHED FROM CHECKUP / HEALTH_MONITORING
+  void _showStartConsultationDialog(BuildContext context,
+      Map<String, dynamic> data, String petName, String? petId) {
     final diagnosisController = TextEditingController();
     final prescriptionController = TextEditingController();
     final doctorNotesController = TextEditingController();
@@ -902,14 +919,13 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           child: Container(
-            width: 680, // Expanded width for a spacious layout
+            width: 680,
             padding: const EdgeInsets.all(32),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // HEADER BANNER
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -980,9 +996,66 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
-                  // FIELD 1: CLINICAL DIAGNOSIS (AUTO-EXPANDING)
+                  // REAL-TIME VITAL SIGNS FETCHED FROM CHECKUP / HEALTH_MONITORING DATABASE
+                  const Text(
+                    'PATIENT VITAL SIGNS (RECORDED BY ADMIN)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2563EB),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FutureBuilder<QuerySnapshot>(
+                    future: petId != null
+                        ? _db
+                            .collection('checkup_records')
+                            .where('petId', isEqualTo: petId)
+                            .orderBy('createdAt', descending: true)
+                            .limit(1)
+                            .get()
+                        : null,
+                    builder: (context, vitalsSnapshot) {
+                      String weight = 'N/A';
+                      String temp = 'N/A';
+                      String pulse = 'N/A';
+
+                      if (vitalsSnapshot.hasData &&
+                          vitalsSnapshot.data!.docs.isNotEmpty) {
+                        final vData = vitalsSnapshot.data!.docs.first.data()
+                            as Map<String, dynamic>;
+                        weight = '${vData['weight'] ?? '12.0'} kg';
+                        temp = '${vData['temperature'] ?? '38.5'} °C';
+                        pulse = '${vData['pulse'] ?? '110'} bpm';
+                      }
+
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildVitalBadge('Weight', weight,
+                                Icons.monitor_weight_outlined),
+                            _buildVitalBadge(
+                                'Temperature', temp, Icons.thermostat_outlined),
+                            _buildVitalBadge(
+                                'Pulse / HR', pulse, Icons.favorite_border),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // FIELD 1: CLINICAL DIAGNOSIS
                   const Text(
                     'CLINICAL DIAGNOSIS*',
                     style: TextStyle(
@@ -995,8 +1068,8 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: diagnosisController,
-                    minLines: 3, // Starts with 3 lines height
-                    maxLines: 6, // Expands up to 6 lines as Doc types
+                    minLines: 3,
+                    maxLines: 6,
                     style: const TextStyle(
                         fontSize: 13, color: Color(0xFF0F172A), height: 1.4),
                     decoration: InputDecoration(
@@ -1004,11 +1077,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                           'Enter detailed clinical findings or diagnosis...',
                       hintStyle: const TextStyle(
                           fontSize: 13, color: Color(0xFF94A3B8)),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(bottom: 40),
-                        child: Icon(Icons.medical_information_outlined,
-                            size: 18, color: Color(0xFF64748B)),
-                      ),
                       filled: true,
                       fillColor: const Color(0xFFF8FAFC),
                       contentPadding: const EdgeInsets.symmetric(
@@ -1029,7 +1097,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   ),
                   const SizedBox(height: 18),
 
-                  // FIELD 2: PRESCRIBED MEDICATIONS / TREATMENT (AUTO-EXPANDING)
+                  // FIELD 2: PRESCRIBED MEDICATIONS / TREATMENT
                   const Text(
                     'PRESCRIBED MEDICATIONS / TREATMENT',
                     style: TextStyle(
@@ -1051,11 +1119,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                           'List prescribed meds, dosage, and frequency...',
                       hintStyle: const TextStyle(
                           fontSize: 13, color: Color(0xFF94A3B8)),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(bottom: 40),
-                        child: Icon(Icons.medication_outlined,
-                            size: 18, color: Color(0xFF64748B)),
-                      ),
                       filled: true,
                       fillColor: const Color(0xFFF8FAFC),
                       contentPadding: const EdgeInsets.symmetric(
@@ -1076,7 +1139,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   ),
                   const SizedBox(height: 18),
 
-                  // FIELD 3: VETERINARIAN NOTES (AUTO-EXPANDING)
+                  // FIELD 3: VETERINARIAN NOTES
                   const Text(
                     'VETERINARIAN NOTES',
                     style: TextStyle(
@@ -1089,7 +1152,7 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: doctorNotesController,
-                    minLines: 4, // Starts spacious with 4 lines
+                    minLines: 4,
                     maxLines: 8,
                     style: const TextStyle(
                         fontSize: 13, color: Color(0xFF0F172A), height: 1.4),
@@ -1098,11 +1161,6 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
                           'Add follow-up instructions, diet advice, or special remarks...',
                       hintStyle: const TextStyle(
                           fontSize: 13, color: Color(0xFF94A3B8)),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(bottom: 60),
-                        child: Icon(Icons.note_alt_outlined,
-                            size: 18, color: Color(0xFF64748B)),
-                      ),
                       filled: true,
                       fillColor: const Color(0xFFF8FAFC),
                       contentPadding: const EdgeInsets.symmetric(
@@ -1179,6 +1237,30 @@ class _DoctorDashboardScreenState extends State<DoctorDashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVitalBadge(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF16A34A)),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF166534))),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A))),
+          ],
+        ),
+      ],
     );
   }
 }

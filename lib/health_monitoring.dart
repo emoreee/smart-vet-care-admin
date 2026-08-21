@@ -14,11 +14,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  // Selected filter for top stat cards: 'Active Monitoring', 'Critical Alerts', 'Discharged Today'
-  String _selectedStatFilter = 'Active Monitoring';
-
-  // Mocking current logged in user role
-  final String _currentUserRole = 'Doctor';
+  String _selectedServiceFilter = 'Checkup';
   final String _currentDoctorName = 'Dr. Tamesis';
 
   @override
@@ -37,68 +33,463 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     super.dispose();
   }
 
-  String _formatDateToWords(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return 'No Date';
-    try {
-      final DateTime parsedDate = DateTime.parse(dateStr);
-      final List<String> months = [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December'
-      ];
-      final monthName = months[parsedDate.month - 1];
-      final dayStr = parsedDate.day.toString().padLeft(2, '0');
-      return '$monthName $dayStr, ${parsedDate.year}';
-    } catch (e) {
-      return dateStr;
-    }
-  }
-
-  void _openNewIntakeModal() {
-    if (_currentUserRole != 'Doctor') {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.lock, color: Color(0xFFDC2626)),
-              SizedBox(width: 8),
-              Text('Access Restricted',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: const Text(
-            'Only licensed veterinarians/doctors are authorized to perform patient admission and initial medical assessment.',
-            style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Understood',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
+  void _openServiceRecordModal(
+      String serviceType, Map<String, dynamic> petData) {
     showDialog(
       context: context,
-      builder: (context) =>
-          NewPatientIntakeModal(defaultDoctorName: _currentDoctorName),
+      builder: (context) => ServiceRecordFormModal(
+        serviceType: serviceType,
+        petData: petData,
+        attendingDoctor: _currentDoctorName,
+      ),
+    );
+  }
+
+  void _showAddServiceChoiceDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String chosenService = 'Checkup';
+        Map<String, dynamic>? selectedPetData;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                width: 580,
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.90),
+                padding: const EdgeInsets.all(28),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Add Patient Record',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A))),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 20),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('1. SELECT SERVICE TYPE',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DialogServiceCard(
+                              title: 'CHECKUP',
+                              icon: Icons.medical_services_outlined,
+                              color: const Color(0xFF2563EB),
+                              bgColor: const Color(0xFFEFF6FF),
+                              isSelected: chosenService == 'Checkup',
+                              onTap: () => setDialogState(
+                                  () => chosenService = 'Checkup'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _DialogServiceCard(
+                              title: 'VACCINE',
+                              icon: Icons.vaccines_outlined,
+                              color: const Color(0xFF16A34A),
+                              bgColor: const Color(0xFFF0FDF4),
+                              isSelected: chosenService == 'Vaccination',
+                              onTap: () => setDialogState(
+                                  () => chosenService = 'Vaccination'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DialogServiceCard(
+                              title: 'SURGERY',
+                              icon: Icons.healing_outlined,
+                              color: const Color(0xFFDC2626),
+                              bgColor: const Color(0xFFFEF2F2),
+                              isSelected: chosenService == 'Surgery',
+                              onTap: () => setDialogState(
+                                  () => chosenService = 'Surgery'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _DialogServiceCard(
+                              title: 'GROOMING',
+                              icon: Icons.content_cut_outlined,
+                              color: const Color(0xFFD97706),
+                              bgColor: const Color(0xFFFFFBEB),
+                              isSelected: chosenService == 'Grooming',
+                              onTap: () => setDialogState(
+                                  () => chosenService = 'Grooming'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text('2A. QUICK SELECT FROM CURRENT APPOINTMENTS',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF4F46E5),
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 6),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: _db.collection('appointments').snapshots(),
+                        builder: (context, apptSnapshot) {
+                          final apptDocs = apptSnapshot.data?.docs ?? [];
+                          final activeAppts = apptDocs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final status =
+                                (data['status'] ?? '').toString().toLowerCase();
+                            return status == 'confirmed' || status == 'pending';
+                          }).toList();
+
+                          if (activeAppts.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(10),
+                                border:
+                                    Border.all(color: const Color(0xFFE2E8F0)),
+                              ),
+                              child: const Text(
+                                  'No active appointments at the moment.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF94A3B8),
+                                      fontStyle: FontStyle.italic)),
+                            );
+                          }
+
+                          return Container(
+                            constraints: const BoxConstraints(maxHeight: 140),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border:
+                                  Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: activeAppts.length,
+                              itemBuilder: (context, index) {
+                                final apptData = activeAppts[index].data()
+                                    as Map<String, dynamic>;
+                                final petName = apptData['petName'] ??
+                                    apptData['name'] ??
+                                    'Pet';
+                                final petId = apptData['petId'] ?? 'PET-00000';
+                                final ownerName =
+                                    apptData['ownerName'] ?? 'Owner';
+                                final service =
+                                    apptData['service'] ?? 'General Checkup';
+
+                                final isSelected =
+                                    selectedPetData?['petId'] == petId;
+
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor: const Color(0xFFEEF2FF),
+                                  title: Text(
+                                      '$petName ($petId) — Owner: $ownerName',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected
+                                              ? const Color(0xFF4F46E5)
+                                              : const Color(0xFF0F172A))),
+                                  subtitle: Text(
+                                      'Service: $service | Date: ${apptData['date'] ?? 'Today'}',
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Color(0xFF64748B))),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle,
+                                          color: Color(0xFF4F46E5), size: 18)
+                                      : const Icon(Icons.radio_button_unchecked,
+                                          color: Color(0xFF94A3B8), size: 18),
+                                  onTap: () {
+                                    setDialogState(() {
+                                      selectedPetData = {
+                                        'petId': petId,
+                                        'petName': petName,
+                                        'ownerName': ownerName,
+                                        'breed': apptData['breed'] ?? 'Mixed',
+                                      };
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      const Center(
+                          child: Text('— OR SEARCH FOR WALK-IN CLIENTS —',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.bold))),
+                      const SizedBox(height: 12),
+                      const Text('2B. SEARCH WALK-IN PATIENT',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 6),
+                      StreamBuilder<QuerySnapshot>(
+                        stream: _db.collection('pets').snapshots(),
+                        builder: (context, petSnapshot) {
+                          final petDocs = petSnapshot.data?.docs ?? [];
+
+                          return StreamBuilder<QuerySnapshot>(
+                            stream: _db.collection('users').snapshots(),
+                            builder: (context, userSnapshot) {
+                              final userDocs = userSnapshot.data?.docs ?? [];
+
+                              Map<String, String> userNames = {};
+                              for (var uDoc in userDocs) {
+                                final uData =
+                                    uDoc.data() as Map<String, dynamic>;
+                                final uName = uData['fullName'] ??
+                                    uData['name'] ??
+                                    'Owner';
+                                final ownerId = uData['ownerId'] ??
+                                    uData['ownerID'] ??
+                                    uDoc.id;
+                                userNames[ownerId.toString()] = uName;
+                                userNames[uDoc.id] = uName;
+                              }
+
+                              List<Map<String, dynamic>> allPatients =
+                                  petDocs.map((doc) {
+                                final pData =
+                                    doc.data() as Map<String, dynamic>;
+                                final petName = pData['name'] ??
+                                    pData['petName'] ??
+                                    'Unnamed Pet';
+                                final petId = pData['petId'] ?? doc.id;
+                                final ownerIdKey =
+                                    (pData['ownerId'] ?? pData['userId'] ?? '')
+                                        .toString();
+                                final resolvedOwner = pData['ownerName'] ??
+                                    pData['fullName'] ??
+                                    userNames[ownerIdKey] ??
+                                    'N/A';
+                                final ownerId =
+                                    ownerIdKey.isNotEmpty ? ownerIdKey : 'N/A';
+
+                                return {
+                                  'petId': petId,
+                                  'petName': petName,
+                                  'ownerName': resolvedOwner,
+                                  'ownerId': ownerId,
+                                  'breed': pData['breed'] ??
+                                      pData['species'] ??
+                                      'Mixed',
+                                };
+                              }).toList();
+
+                              return Autocomplete<Map<String, dynamic>>(
+                                displayStringForOption: (option) =>
+                                    'Owner: ${option['ownerName']} — Pet: ${option['petName']}',
+                                optionsBuilder:
+                                    (TextEditingValue textEditingValue) {
+                                  if (textEditingValue.text.trim().isEmpty) {
+                                    return const Iterable<
+                                        Map<String, dynamic>>.empty();
+                                  }
+                                  final query =
+                                      textEditingValue.text.toLowerCase();
+                                  return allPatients.where((patient) {
+                                    final owner = patient['ownerName']
+                                        .toString()
+                                        .toLowerCase();
+                                    final pet = patient['petName']
+                                        .toString()
+                                        .toLowerCase();
+                                    return owner.contains(query) ||
+                                        pet.contains(query);
+                                  });
+                                },
+                                onSelected: (Map<String, dynamic> selection) {
+                                  setDialogState(() {
+                                    selectedPetData = selection;
+                                  });
+                                },
+                                fieldViewBuilder: (context, controller,
+                                    focusNode, onFieldSubmitted) {
+                                  return TextField(
+                                    controller: controller,
+                                    focusNode: focusNode,
+                                    style: const TextStyle(fontSize: 13),
+                                    decoration: _inputDeco(
+                                        'Type walk-in owner or pet name...'),
+                                  );
+                                },
+                                optionsViewBuilder:
+                                    (context, onSelected, options) {
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Material(
+                                      elevation: 4.0,
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        width: 464,
+                                        constraints: const BoxConstraints(
+                                            maxHeight: 180),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                              color: const Color(0xFFE2E8F0)),
+                                        ),
+                                        child: ListView.builder(
+                                          padding: EdgeInsets.zero,
+                                          itemCount: options.length,
+                                          itemBuilder: (context, index) {
+                                            final option =
+                                                options.elementAt(index);
+                                            return InkWell(
+                                              onTap: () => onSelected(option),
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 16,
+                                                        vertical: 10),
+                                                decoration: const BoxDecoration(
+                                                  border: Border(
+                                                      bottom: BorderSide(
+                                                          color: Color(
+                                                              0xFFF1F5F9))),
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Owner: ${option['ownerName']}  •  Pet: ${option['petName']}',
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color: Color(
+                                                              0xFF0F172A)),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      'Pet ID: ${option['petId']}   |   Owner ID: ${option['ownerId']}',
+                                                      style: const TextStyle(
+                                                          fontSize: 10,
+                                                          color: Color(
+                                                              0xFF64748B)),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      if (selectedPetData != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF86EFAC)),
+                          ),
+                          child: Text(
+                            'Selected: ${selectedPetData!['petName']} (${selectedPetData!['petId']}) — Owner: ${selectedPetData!['ownerName']}',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF166534)),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel',
+                                style: TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () {
+                              if (selectedPetData != null) {
+                                Navigator.pop(context);
+                                _openServiceRecordModal(
+                                    chosenService, selectedPetData!);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Please select an appointment or search a patient first!')),
+                                );
+                              }
+                            },
+                            child: const Text('Proceed to Record',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -119,29 +510,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                     builder: (context, snapshot) {
                       final docs = snapshot.data?.docs ?? [];
 
-                      // STATS CALCULATIONS CONNECTED TO FIRESTORE
-                      int activeCount = 0;
-                      int criticalCount = 0;
-                      int dischargedTodayCount = 0;
-
-                      for (var doc in docs) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final status =
-                            (data['status'] ?? '').toString().toUpperCase();
-                        final dischargedAt = data['dischargedAt'];
-
-                        if (dischargedAt == null && status != 'DISCHARGED') {
-                          activeCount++;
-                        }
-                        if (status == 'URGENT' || status == 'CRITICAL') {
-                          criticalCount++;
-                        }
-                        if (status == 'DISCHARGED' || status == 'RECOVERED') {
-                          dischargedTodayCount++;
-                        }
-                      }
-
-                      // SEARCH & STAT CARD FILTERING
                       final filteredDocs = docs.where((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         final petName =
@@ -153,28 +521,11 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                         final breed = (data['breed'] ?? data['species'] ?? '')
                             .toString()
                             .toLowerCase();
-                        final status =
-                            (data['status'] ?? '').toString().toUpperCase();
-                        final dischargedAt = data['dischargedAt'];
 
-                        final matchesSearch = petName.contains(_searchQuery) ||
+                        return petName.contains(_searchQuery) ||
                             petId.contains(_searchQuery) ||
                             ownerName.contains(_searchQuery) ||
                             breed.contains(_searchQuery);
-
-                        bool matchesStatFilter = true;
-                        if (_selectedStatFilter == 'Active Monitoring') {
-                          matchesStatFilter =
-                              (dischargedAt == null && status != 'DISCHARGED');
-                        } else if (_selectedStatFilter == 'Critical Alerts') {
-                          matchesStatFilter =
-                              (status == 'URGENT' || status == 'CRITICAL');
-                        } else if (_selectedStatFilter == 'Discharged Today') {
-                          matchesStatFilter =
-                              (status == 'DISCHARGED' || status == 'RECOVERED');
-                        }
-
-                        return matchesSearch && matchesStatFilter;
                       }).toList();
 
                       return SingleChildScrollView(
@@ -182,7 +533,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Header Row
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -203,108 +553,93 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                     ),
                                     SizedBox(height: 4),
                                     Text(
-                                      'Efficiently manage and monitor patient vital statistics, medical history, and confinement status.',
+                                      'Manage separate Firestore databases for Checkup, Vaccination, Surgery, and Grooming logs.',
                                       style: TextStyle(
                                           fontSize: 12,
                                           color: Color(0xFF64748B)),
                                     ),
                                   ],
                                 ),
-                                Row(
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: () {},
-                                      icon: const Icon(Icons.filter_list,
-                                          size: 16, color: Color(0xFF334155)),
-                                      label: const Text('Filter View',
-                                          style: TextStyle(
-                                              color: Color(0xFF334155),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold)),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 16),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8)),
-                                        side: const BorderSide(
-                                            color: Color(0xFFCBD5E1)),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    ElevatedButton.icon(
-                                      onPressed: _openNewIntakeModal,
-                                      icon: const Icon(Icons.add,
-                                          size: 18, color: Colors.white),
-                                      label: const Text('+ Patient Admission',
-                                          style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            const Color(0xFF0F172A),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 20, vertical: 16),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8)),
-                                        elevation: 0,
-                                      ),
-                                    ),
-                                  ],
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0F172A),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 20, vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: _showAddServiceChoiceDialog,
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Add Patient Record',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13)),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 28),
-
-                            // CLICKABLE STAT CARDS
                             Row(
                               children: [
-                                _StatCard(
-                                  label: 'Active Monitoring',
-                                  count: activeCount.toString(),
-                                  icon: Icons.show_chart,
-                                  iconBgColor: const Color(0xFFEEF2FF),
-                                  iconColor: const Color(0xFF4F46E5),
-                                  isSelected: _selectedStatFilter ==
-                                      'Active Monitoring',
-                                  onTap: () => setState(() =>
-                                      _selectedStatFilter =
-                                          'Active Monitoring'),
+                                Expanded(
+                                  child: _ServiceHeaderCard(
+                                    title: 'CHECKUP',
+                                    subtitle: 'Vitals & Diagnosis',
+                                    icon: Icons.medical_services_outlined,
+                                    color: const Color(0xFF2563EB),
+                                    bgColor: const Color(0xFFEFF6FF),
+                                    isSelected:
+                                        _selectedServiceFilter == 'Checkup',
+                                    onTap: () => setState(() =>
+                                        _selectedServiceFilter = 'Checkup'),
+                                  ),
                                 ),
-                                const SizedBox(width: 20),
-                                _StatCard(
-                                  label: 'Critical Alerts',
-                                  count:
-                                      criticalCount.toString().padLeft(2, '0'),
-                                  icon: Icons.warning_amber_rounded,
-                                  iconBgColor: const Color(0xFFFEE2E2),
-                                  iconColor: const Color(0xFFDC2626),
-                                  isSelected:
-                                      _selectedStatFilter == 'Critical Alerts',
-                                  onTap: () => setState(() =>
-                                      _selectedStatFilter = 'Critical Alerts'),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _ServiceHeaderCard(
+                                    title: 'VACCINATION',
+                                    subtitle: 'Batch & Administered',
+                                    icon: Icons.vaccines_outlined,
+                                    color: const Color(0xFF16A34A),
+                                    bgColor: const Color(0xFFF0FDF4),
+                                    isSelected:
+                                        _selectedServiceFilter == 'Vaccination',
+                                    onTap: () => setState(() =>
+                                        _selectedServiceFilter = 'Vaccination'),
+                                  ),
                                 ),
-                                const SizedBox(width: 20),
-                                _StatCard(
-                                  label: 'Discharged Today',
-                                  count: dischargedTodayCount
-                                      .toString()
-                                      .padLeft(2, '0'),
-                                  icon: Icons.check_circle_outline,
-                                  iconBgColor: const Color(0xFFDCFCE7),
-                                  iconColor: const Color(0xFF16A34A),
-                                  isSelected:
-                                      _selectedStatFilter == 'Discharged Today',
-                                  onTap: () => setState(() =>
-                                      _selectedStatFilter = 'Discharged Today'),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _ServiceHeaderCard(
+                                    title: 'SURGERY',
+                                    subtitle: 'Treatment & Labs',
+                                    icon: Icons.healing_outlined,
+                                    color: const Color(0xFFDC2626),
+                                    bgColor: const Color(0xFFFEF2F2),
+                                    isSelected:
+                                        _selectedServiceFilter == 'Surgery',
+                                    onTap: () => setState(() =>
+                                        _selectedServiceFilter = 'Surgery'),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _ServiceHeaderCard(
+                                    title: 'GROOMING',
+                                    subtitle: 'Instructions & Allergies',
+                                    icon: Icons.content_cut_outlined,
+                                    color: const Color(0xFFD97706),
+                                    bgColor: const Color(0xFFFFFBEB),
+                                    isSelected:
+                                        _selectedServiceFilter == 'Grooming',
+                                    onTap: () => setState(() =>
+                                        _selectedServiceFilter = 'Grooming'),
+                                  ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 32),
-
-                            // FULL-WIDTH PATIENT REGISTRY TABLE WITH CONFINEMENT STATUS
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
@@ -321,36 +656,12 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                              'Patient Registry ($_selectedStatFilter)',
-                                              style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF0F172A))),
-                                          const SizedBox(width: 12),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFF1F5F9),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                  color:
-                                                      const Color(0xFFE2E8F0)),
-                                            ),
-                                            child: Text(
-                                              '${filteredDocs.length} TOTAL',
-                                              style: const TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF64748B)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      Text(
+                                          'Patient Registry — View Service: $_selectedServiceFilter',
+                                          style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0F172A))),
                                       Container(
                                         width: 280,
                                         height: 38,
@@ -383,18 +694,14 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 20),
-
-                                  // PATIENT REGISTRY TABLE WITH CONFINEMENT STATUS
                                   Table(
                                     columnWidths: const {
-                                      0: FlexColumnWidth(1.2), // PET ID
-                                      1: FlexColumnWidth(1.5), // PET NAME
-                                      2: FlexColumnWidth(1.8), // OWNER'S NAME
-                                      3: FlexColumnWidth(1.4), // BREED
-                                      4: FlexColumnWidth(
-                                          1.8), // CONFINEMENT STATUS
-                                      5: FlexColumnWidth(1.2), // MEDICAL STATUS
-                                      6: FlexColumnWidth(0.9), // ACTIONS
+                                      0: FlexColumnWidth(1.2),
+                                      1: FlexColumnWidth(1.6),
+                                      2: FlexColumnWidth(1.8),
+                                      3: FlexColumnWidth(1.4),
+                                      4: FlexColumnWidth(1.8),
+                                      5: FlexColumnWidth(1.2),
                                     },
                                     defaultVerticalAlignment:
                                         TableCellVerticalAlignment.middle,
@@ -403,60 +710,29 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                                         children: [
                                           _TableHeader('PET ID'),
                                           _TableHeader('PET NAME'),
-                                          _TableHeader('OWNER\'S NAME'),
-                                          _TableHeader('BREED'),
-                                          _TableHeader('CONFINEMENT'),
+                                          _TableHeader('OWNER'),
                                           _TableHeader('STATUS'),
-                                          _TableHeader('ACTIONS'),
+                                          _TableHeader('WARD / BAY'),
+                                          _TableHeader('ACTION'),
                                         ],
                                       ),
                                       for (var doc in filteredDocs)
                                         _buildRow(doc),
                                     ],
                                   ),
-
                                   if (filteredDocs.isEmpty)
                                     const Padding(
                                       padding:
                                           EdgeInsets.symmetric(vertical: 40.0),
                                       child: Center(
                                         child: Text(
-                                            'No patients found matching this filter.',
+                                            'No patients found in registry.',
                                             style: TextStyle(
                                                 color: Color(0xFF94A3B8),
                                                 fontSize: 13,
                                                 fontStyle: FontStyle.italic)),
                                       ),
                                     ),
-
-                                  const SizedBox(height: 24),
-
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Showing 1 to ${filteredDocs.length} of ${docs.length} entries',
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF64748B)),
-                                      ),
-                                      Row(
-                                        children: const [
-                                          IconButton(
-                                              icon: Icon(Icons.chevron_left,
-                                                  size: 20,
-                                                  color: Color(0xFF94A3B8)),
-                                              onPressed: null),
-                                          IconButton(
-                                              icon: Icon(Icons.chevron_right,
-                                                  size: 20,
-                                                  color: Color(0xFF94A3B8)),
-                                              onPressed: null),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
                                 ],
                               ),
                             ),
@@ -476,15 +752,11 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
 
   TableRow _buildRow(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-
     final petId = data['petId'] ?? 'PET-00000';
     final petName = data['petName'] ?? data['name'] ?? 'Pet';
     final ownerName = data['ownerName'] ?? 'Owner';
-    final breed = data['breed'] ?? data['species'] ?? 'Dog';
     final status = (data['status'] ?? 'STABLE').toString().toUpperCase();
-    final dischargedAt = data['dischargedAt'];
-
-    bool isConfined = (dischargedAt == null && status != 'DISCHARGED');
+    final locationBay = data['locationBay'] ?? 'Recovery Bay';
 
     return TableRow(
       children: [
@@ -493,7 +765,7 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
           child: Text(petId,
               style: const TextStyle(
                   color: Color(0xFF64748B),
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold)),
         ),
         Text(petName,
@@ -502,46 +774,32 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
                 fontSize: 13,
                 color: Color(0xFF0F172A))),
         Text(ownerName,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF334155))),
-        Text(breed,
-            style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w500)),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isConfined ? Icons.hotel_outlined : Icons.home_outlined,
-                size: 14,
-                color: isConfined
-                    ? const Color(0xFF0284C7)
-                    : const Color(0xFF16A34A),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                isConfined ? 'CONFINED' : 'NAKAUWI NA',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: isConfined
-                      ? const Color(0xFF0284C7)
-                      : const Color(0xFF16A34A),
-                ),
-              ),
-            ],
-          ),
-        ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF334155))),
         _buildStatusBadge(status),
+        Text(locationBay,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
         InkWell(
-          onTap: () => _openPatientDetailsModal(doc.id, data),
-          child: const Text('Details',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A))),
+          onTap: () => _openServiceRecordModal(_selectedServiceFilter, data),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.add, size: 14, color: Colors.white),
+                const SizedBox(width: 4),
+                Text('Add $_selectedServiceFilter',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -549,7 +807,6 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
 
   Widget _buildStatusBadge(String status) {
     Color textColor = const Color(0xFF16A34A);
-
     if (status == 'URGENT' || status == 'CRITICAL') {
       textColor = const Color(0xFFDC2626);
     } else if (status == 'RECOVERED' || status == 'DISCHARGED') {
@@ -557,408 +814,539 @@ class _HealthMonitoringScreenState extends State<HealthMonitoringScreen> {
     } else if (status == 'OBSERVATION') {
       textColor = const Color(0xFFD97706);
     }
-
-    return Text(
-      status,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        color: textColor,
-        letterSpacing: 0.5,
-      ),
-    );
+    return Text(status,
+        style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.bold, color: textColor));
   }
+}
 
-  void _openPatientDetailsModal(String docId, Map<String, dynamic> data) {
-    final petName = data['petName'] ?? data['name'] ?? 'Pet Patient';
-    final petId = data['petId'] ?? 'PET-00000';
-    final breed = data['breed'] ?? data['species'] ?? 'Dog';
-    final ownerName = data['ownerName'] ?? 'Owner';
-    final doctorName = data['doctorName'] ?? 'Dr. Tamesis';
-    final status = (data['status'] ?? 'STABLE').toString().toUpperCase();
-    final dischargedAt = data['dischargedAt'];
+InputDecoration _inputDeco(String label) {
+  return InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(
+        fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+    filled: true,
+    fillColor: const Color(0xFFF8FAFC),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+    enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+    focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
+  );
+}
 
-    bool isConfined = (dischargedAt == null && status != 'DISCHARGED');
+class _DialogServiceCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Color bgColor;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          width: 680,
-          padding: const EdgeInsets.all(28),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          backgroundColor: Color(0xFFEEF2FF),
-                          child: Icon(Icons.pets, color: Color(0xFF4F46E5)),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(petName,
-                                style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A))),
-                            Text('$petId ($breed) • Owner: $ownerName',
-                                style: const TextStyle(
-                                    fontSize: 12, color: Color(0xFF64748B))),
-                          ],
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => Navigator.pop(context)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0))),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ATTENDING VET: $doctorName',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF475569))),
-                          const SizedBox(height: 2),
-                          Text(
-                            isConfined
-                                ? 'STATUS: CONFINED AT CLINIC BAY'
-                                : 'STATUS: DISCHARGED / NAKAUWI NA',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: isConfined
-                                  ? const Color(0xFF0284C7)
-                                  : const Color(0xFF16A34A),
-                            ),
-                          ),
-                        ],
-                      ),
-                      _buildStatusBadge(status),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'MEDICAL RECORDS & CLINICAL DIAGNOSIS HISTORY',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF94A3B8),
-                      letterSpacing: 0.5),
-                ),
-                const SizedBox(height: 10),
-                StreamBuilder<QuerySnapshot>(
-                  stream: _db
-                      .collection('medical_records')
-                      .where('petId', isEqualTo: petId)
-                      .snapshots(),
-                  builder: (context, recordSnap) {
-                    if (recordSnap.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+  const _DialogServiceCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.bgColor,
+    required this.isSelected,
+    required this.onTap,
+  });
 
-                    final records = recordSnap.data?.docs ?? [];
-
-                    if (records.isEmpty) {
-                      return Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE2E8F0))),
-                        child: const Text(
-                          'No prior consultation or clinical diagnosis found for this pet.',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF94A3B8),
-                              fontStyle: FontStyle.italic),
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: records.map((doc) {
-                        final rec = doc.data() as Map<String, dynamic>;
-                        final diagnosis =
-                            rec['diagnosis'] ?? 'No recorded diagnosis';
-                        final prescription =
-                            rec['prescription'] ?? 'None prescribed';
-                        final veterinarianNotes = rec['veterinarianNotes'] ??
-                            rec['notes'] ??
-                            'No notes provided';
-                        final service = rec['service'] ?? 'General Checkup';
-                        final docName = rec['doctorName'] ?? doctorName;
-                        final isUrgent = rec['isUrgent'] ?? false;
-
-                        String formattedDate = 'Recent';
-                        if (rec['createdAt'] != null &&
-                            rec['createdAt'] is Timestamp) {
-                          formattedDate = _formatDateToWords(
-                              (rec['createdAt'] as Timestamp)
-                                  .toDate()
-                                  .toString());
-                        }
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: isUrgent
-                                      ? const Color(0xFFFCA5A5)
-                                      : const Color(0xFFE2E8F0))),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFEEF2FF),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          service.toString().toUpperCase(),
-                                          style: const TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF4F46E5)),
-                                        ),
-                                      ),
-                                      if (isUrgent == true) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFEF2F2),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            border: Border.all(
-                                                color: const Color(0xFFFCA5A5)),
-                                          ),
-                                          child: const Text(
-                                            'URGENT',
-                                            style: TextStyle(
-                                                fontSize: 8.5,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFFDC2626)),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  Text(formattedDate,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF64748B))),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              const Text('CLINICAL DIAGNOSIS:',
-                                  style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF94A3B8))),
-                              const SizedBox(height: 2),
-                              Text(diagnosis,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F172A))),
-                              const SizedBox(height: 10),
-                              const Text('PRESCRIBED MEDICATIONS / TREATMENT:',
-                                  style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF94A3B8))),
-                              const SizedBox(height: 2),
-                              Text(prescription,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF334155))),
-                              const SizedBox(height: 10),
-                              const Text('VETERINARIAN NOTES:',
-                                  style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF94A3B8))),
-                              const SizedBox(height: 2),
-                              Text(veterinarianNotes,
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Color(0xFF64748B))),
-                              const SizedBox(height: 10),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text('Attending Vet: $docName',
-                                    style: const TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0F172A))),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (isConfined)
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF16A34A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.home_outlined, size: 18),
-                        label: const Text('Discharge Patient (Uuwi Na)',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 12)),
-                        onPressed: () async {
-                          await _db
-                              .collection('health_monitoring')
-                              .doc(docId)
-                              .update({
-                            'status': 'DISCHARGED',
-                            'dischargedAt': FieldValue.serverTimestamp(),
-                          });
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  '$petName has been discharged and marked as Nakauwi Na!'),
-                            ),
-                          );
-                        },
-                      )
-                    else
-                      const Text(
-                        '✓ Patient is already Discharged',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF16A34A)),
-                      ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close Record',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE2E8F0),
+            width: isSelected ? 2.2 : 1.0,
           ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: bgColor, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(title,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? color : const Color(0xFF0F172A))),
+            ),
+            if (isSelected)
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                child: const Icon(Icons.check, size: 10, color: Colors.white),
+              ),
+          ],
         ),
       ),
     );
   }
 }
 
-class NewPatientIntakeModal extends StatefulWidget {
-  final String defaultDoctorName;
-  const NewPatientIntakeModal({super.key, required this.defaultDoctorName});
+class _ServiceHeaderCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final Color bgColor;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ServiceHeaderCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.bgColor,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
-  State<NewPatientIntakeModal> createState() => _NewPatientIntakeModalState();
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE2E8F0),
+            width: isSelected ? 2.2 : 1.0,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                      color: color.withOpacity(0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2))
+                ]
+              : [],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: bgColor, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? color : const Color(0xFF0F172A))),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF64748B))),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                child: const Icon(Icons.check, size: 12, color: Colors.white),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
-  final _formKey = GlobalKey<FormState>();
+class ServiceRecordFormModal extends StatefulWidget {
+  final String serviceType;
+  final Map<String, dynamic> petData;
+  final String attendingDoctor;
 
-  String? _selectedOwnerDocId;
-  String? _selectedOwnerId;
-  String? _selectedOwnerName;
+  const ServiceRecordFormModal({
+    super.key,
+    required this.serviceType,
+    required this.petData,
+    required this.attendingDoctor,
+  });
 
-  String? _selectedPetDocId;
-  String? _selectedPetId;
-  String? _selectedPetName;
-  String? _selectedBreed;
+  @override
+  State<ServiceRecordFormModal> createState() => _ServiceRecordFormModalState();
+}
 
-  String _selectedService = 'General Checkup';
-  late String _selectedDoctor;
+class _ServiceRecordFormModalState extends State<ServiceRecordFormModal> {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  bool _isSaving = false;
+  bool _isLoadingAppointment = true;
 
-  // Controllers with 100% dark solid text when typed/selected, or clean placeholder
-  final TextEditingController _chiefComplaintController =
-      TextEditingController(text: 'Severe vomiting and dehydration');
-  final TextEditingController _locationBayController =
-      TextEditingController(text: 'Recovery Bay A1');
+  final TextEditingController _weightController =
+      TextEditingController(text: '12.0');
   final TextEditingController _tempController =
       TextEditingController(text: '38.5');
-  final TextEditingController _heartRateController =
+  final TextEditingController _pulseController =
       TextEditingController(text: '110');
-  final TextEditingController _weightController =
-      TextEditingController(text: '12.5');
 
-  String _selectedStatus = 'STABLE';
-  bool _isSaving = false;
+  String _selectedVaccineName = 'Anti-Rabies Vaccine';
+  final TextEditingController _batchNumberController = TextEditingController();
+  final TextEditingController _dateAdministeredController =
+      TextEditingController(
+    text: DateTime.now().toString().split(' ')[0],
+  );
+  final TextEditingController _administeredByController =
+      TextEditingController();
+
+  String _retrievedGroomingNotes =
+      'Fetching grooming instructions and allergies from appointments...';
+  final TextEditingController _groomingRemarksController =
+      TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _selectedDoctor = widget.defaultDoctorName;
+    _administeredByController.text = widget.attendingDoctor;
+    if (widget.serviceType == 'Grooming') {
+      _fetchGroomingDataFromAppointments();
+    } else {
+      _isLoadingAppointment = false;
+    }
   }
 
-  InputDecoration _inputDeco(String label, {String? hint}) {
+  void _fetchGroomingDataFromAppointments() async {
+    try {
+      final petId = widget.petData['petId'];
+      final query = await _db
+          .collection('appointments')
+          .where('petId', isEqualTo: petId)
+          .where('service', isEqualTo: 'Grooming')
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        final data = query.docs.first.data() as Map<String, dynamic>;
+        setState(() {
+          _retrievedGroomingNotes =
+              data['notes'] ?? 'No specific instructions or allergies listed.';
+          _isLoadingAppointment = false;
+        });
+      } else {
+        setState(() {
+          _retrievedGroomingNotes =
+              'No matching Grooming appointment found. Default: No allergies specified.';
+          _isLoadingAppointment = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _retrievedGroomingNotes = 'Error retrieving appointment data: $e';
+        _isLoadingAppointment = false;
+      });
+    }
+  }
+
+  void _saveRecord() async {
+    setState(() => _isSaving = true);
+    try {
+      final petId = widget.petData['petId'] ?? 'PET-00000';
+      final petName =
+          widget.petData['petName'] ?? widget.petData['name'] ?? 'Pet';
+      final ownerName = widget.petData['ownerName'] ?? 'Owner';
+
+      String targetCollection = '';
+      Map<String, dynamic> recordData = {
+        'petId': petId,
+        'petName': petName,
+        'ownerName': ownerName,
+        'doctor': widget.attendingDoctor,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      if (widget.serviceType == 'Checkup') {
+        targetCollection = 'checkup_records';
+        recordData.addAll({
+          'weight': _weightController.text,
+          'temperature': _tempController.text,
+          'pulse': _pulseController.text,
+        });
+      } else if (widget.serviceType == 'Vaccination') {
+        targetCollection = 'vaccination_records';
+        recordData.addAll({
+          'vaccineName': _selectedVaccineName,
+          'batchLotNumber': _batchNumberController.text,
+          'dateAdministered': _dateAdministeredController.text,
+          'administeredBy': _administeredByController.text,
+        });
+      } else if (widget.serviceType == 'Surgery') {
+        targetCollection = 'surgery_records';
+        recordData.addAll({
+          'weight': _weightController.text,
+          'temperature': _tempController.text,
+          'pulse': _pulseController.text,
+        });
+      } else if (widget.serviceType == 'Grooming') {
+        targetCollection = 'grooming_records';
+        recordData.addAll({
+          'specialInstructionsAndAllergies': _retrievedGroomingNotes,
+          'adminRemarks': _groomingRemarksController.text,
+          'groomingStatus': 'Completed',
+        });
+      }
+
+      await _db.collection(targetCollection).add(recordData);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  '${widget.serviceType} record saved to "$targetCollection"!'),
+              backgroundColor: const Color(0xFF166534)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error saving record: $e'),
+            backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final petName =
+        widget.petData['petName'] ?? widget.petData['name'] ?? 'Pet';
+    final petId = widget.petData['petId'] ?? 'PET-00000';
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: 600,
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85),
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('New ${widget.serviceType} Record ($petName - $petId)',
+                    style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A))),
+                IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.serviceType == 'Checkup' ||
+                        widget.serviceType == 'Surgery') ...[
+                      const Text('1. VITAL SIGNS (ADMIN RECORD)',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2563EB))),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: TextField(
+                                  controller: _weightController,
+                                  decoration: _inputDeco('Weight (kg)'))),
+                          const SizedBox(width: 8),
+                          Expanded(
+                              child: TextField(
+                                  controller: _tempController,
+                                  decoration: _inputDeco('Temp (°C)'))),
+                          const SizedBox(width: 8),
+                          Expanded(
+                              child: TextField(
+                                  controller: _pulseController,
+                                  decoration: _inputDeco('Pulse / HR'))),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: const Text(
+                          'Note: Clinical assessment, diagnosis, and treatment plans are handled directly by the attending veterinarian in the Doctor\'s Portal.',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF1E40AF),
+                              fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                    ],
+                    if (widget.serviceType == 'Vaccination') ...[
+                      const Text('VACCINATION LOG DETAILS',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF16A34A))),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _selectedVaccineName,
+                        decoration: _inputDeco('1. Vaccine Name'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'Anti-Rabies Vaccine',
+                              child: Text('Anti-Rabies Vaccine',
+                                  style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(
+                              value: '5-in-1 Vaccine (DHPPiL / DHLPP)',
+                              child: Text('5-in-1 Vaccine (DHPPiL / DHLPP)',
+                                  style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(
+                              value: '4-in-1 Vaccine (FVRCP)',
+                              child: Text('4-in-1 Vaccine (FVRCP)',
+                                  style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(
+                              value: 'Feline Leukemia Vaccine (FeLV)',
+                              child: Text('Feline Leukemia Vaccine (FeLV)',
+                                  style: TextStyle(fontSize: 13))),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedVaccineName = val!),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                          controller: _batchNumberController,
+                          decoration: _inputDeco('2. Batch / Lot Number')),
+                      const SizedBox(height: 12),
+                      TextField(
+                          controller: _dateAdministeredController,
+                          decoration: _inputDeco('3. Date Administered')),
+                      const SizedBox(height: 12),
+                      TextField(
+                          controller: _administeredByController,
+                          decoration: _inputDeco('4. Administered By / Staff')),
+                    ],
+                    if (widget.serviceType == 'Grooming') ...[
+                      const Text('GROOMING — LINKED APPOINTMENT DATA',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD97706))),
+                      const SizedBox(height: 12),
+                      _isLoadingAppointment
+                          ? const Center(child: CircularProgressIndicator())
+                          : Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(10),
+                                border:
+                                    Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                      'Retrieved from Appointments Collection:',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFB45309))),
+                                  const SizedBox(height: 6),
+                                  Text(_retrievedGroomingNotes,
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF78350F))),
+                                ],
+                              ),
+                            ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _groomingRemarksController,
+                        maxLines: 2,
+                        decoration: _inputDeco(
+                            'Admin Remarks / Completed Grooming Notes'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel',
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.bold))),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _saveRecord,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 14)),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('Save to Firestore',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDeco(String label) {
     return InputDecoration(
       labelText: label,
-      hintText: hint,
       labelStyle: const TextStyle(
           fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
-      hintStyle: const TextStyle(
-          fontSize: 12,
-          color: Color(0x9994A3B8),
-          fontWeight: FontWeight.normal),
       filled: true,
       fillColor: const Color(0xFFF8FAFC),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -971,474 +1359,6 @@ class _NewPatientIntakeModalState extends State<NewPatientIntakeModal> {
       focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: Color(0xFF0F172A), width: 1.5)),
-    );
-  }
-
-  void _saveIntake() async {
-    if (_formKey.currentState!.validate()) {
-      if (_selectedOwnerDocId == null || _selectedPetDocId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Please select owner and pet!'),
-            backgroundColor: Colors.red));
-        return;
-      }
-
-      setState(() => _isSaving = true);
-
-      try {
-        final snap = await FirebaseFirestore.instance
-            .collection('health_monitoring')
-            .get();
-        final intakeId =
-            "INT-${(snap.docs.length + 1).toString().padLeft(5, '0')}";
-
-        await FirebaseFirestore.instance.collection('health_monitoring').add({
-          'intakeId': intakeId,
-          'petDocId': _selectedPetDocId,
-          'petId': _selectedPetId ?? 'PET-00001',
-          'petName': _selectedPetName ?? 'Pet',
-          'breed': _selectedBreed ?? 'General',
-          'ownerDocId': _selectedOwnerDocId,
-          'ownerId': _selectedOwnerId ?? 'OWN-00001',
-          'ownerName': _selectedOwnerName ?? 'Owner',
-          'doctorName': _selectedDoctor,
-          'service': _selectedService,
-          'chiefComplaint': _chiefComplaintController.text.trim(),
-          'locationBay': _locationBayController.text.trim(),
-          'status': _selectedStatus,
-          'dischargedAt': null,
-          'admittedAt': FieldValue.serverTimestamp(),
-          'vitals': {
-            'temperature': double.tryParse(_tempController.text.trim()) ?? 38.5,
-            'heartRate': int.tryParse(_heartRateController.text.trim()) ?? 110,
-            'weight': double.tryParse(_weightController.text.trim()) ?? 12.5,
-          },
-        });
-
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text('Patient admission recorded successfully!'),
-                backgroundColor: Color(0xFF166534)),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isSaving = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Error: $e'), backgroundColor: Colors.red));
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // 100% Solid Dark Text Style for Admin Inputs and Dropdowns so it's fully readable
-    const TextStyle normalInputTextStyle = TextStyle(
-      fontSize: 13,
-      color: Color(0xFF0F172A),
-      fontWeight: FontWeight.normal,
-    );
-
-    return Dialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        width: 600,
-        constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.90),
-        padding: const EdgeInsets.all(32),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Patient Admission & Confinement',
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A))),
-                    IconButton(
-                      icon: const Icon(Icons.close,
-                          size: 20, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context),
-                      splashRadius: 20,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .snapshots(),
-                  builder: (context, userSnap) {
-                    final users = userSnap.data?.docs ?? [];
-
-                    if (_selectedOwnerDocId != null) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEEF2FF),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFC7D2FE)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.person_outline,
-                                    size: 18, color: Color(0xFF4F46E5)),
-                                const SizedBox(width: 10),
-                                Text("$_selectedOwnerName ($_selectedOwnerId)",
-                                    style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF312E81))),
-                              ],
-                            ),
-                            TextButton(
-                              onPressed: () => setState(() {
-                                _selectedOwnerDocId = null;
-                                _selectedPetDocId = null;
-                              }),
-                              child: const Text('Change',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF4F46E5))),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Autocomplete<QueryDocumentSnapshot>(
-                      displayStringForOption: (doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        return "${data['fullName']} (${data['ownerID'] ?? data['ownerId'] ?? ''})";
-                      },
-                      optionsBuilder: (textVal) {
-                        if (textVal.text.trim().isEmpty) {
-                          return const Iterable<QueryDocumentSnapshot>.empty();
-                        }
-                        final q = textVal.text.toLowerCase();
-                        return users.where((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return (data['fullName'] ?? '')
-                                  .toString()
-                                  .toLowerCase()
-                                  .contains(q) ||
-                              (data['ownerID'] ?? data['ownerId'] ?? '')
-                                  .toString()
-                                  .toLowerCase()
-                                  .contains(q);
-                        });
-                      },
-                      onSelected: (doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        setState(() {
-                          _selectedOwnerDocId = doc.id;
-                          _selectedOwnerId =
-                              data['ownerID'] ?? data['ownerId'] ?? 'OWN-00001';
-                          _selectedOwnerName = data['fullName'] ?? 'Owner';
-                          _selectedPetDocId = null;
-                        });
-                      },
-                      fieldViewBuilder:
-                          (context, controller, focusNode, onSubmitted) {
-                        return TextFormField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          style: normalInputTextStyle,
-                          decoration: _inputDeco('SEARCH OWNER',
-                              hint: 'Type owner name or ID...'),
-                          validator: (v) => _selectedOwnerDocId == null
-                              ? 'Please select owner'
-                              : null,
-                        );
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (_selectedOwnerDocId != null)
-                  StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('pets')
-                        .where('ownerDocId', isEqualTo: _selectedOwnerDocId)
-                        .snapshots(),
-                    builder: (context, petSnap) {
-                      final pets = petSnap.data?.docs ?? [];
-
-                      if (_selectedPetDocId != null) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(_selectedPetName ?? 'Pet',
-                                      style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white)),
-                                  const SizedBox(width: 8),
-                                  Text("$_selectedPetId • $_selectedOwnerName",
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFF94A3B8))),
-                                ],
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close,
-                                    size: 16, color: Colors.white),
-                                onPressed: () => setState(() {
-                                  _selectedPetDocId = null;
-                                }),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return DropdownButtonFormField<String>(
-                        value: _selectedPetDocId,
-                        style: normalInputTextStyle,
-                        decoration: _inputDeco('SELECT PATIENT PET'),
-                        hint: const Text('Select a pet...',
-                            style: TextStyle(
-                                fontSize: 12, color: Color(0xFF94A3B8))),
-                        items: pets.map((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return DropdownMenuItem<String>(
-                            value: doc.id,
-                            child: Text("${data['petName']} (${data['petId']})",
-                                style: normalInputTextStyle),
-                          );
-                        }).toList(),
-                        onChanged: (docId) {
-                          if (docId != null) {
-                            final selectedDoc = pets
-                                .firstWhere((element) => element.id == docId);
-                            final data =
-                                selectedDoc.data() as Map<String, dynamic>;
-                            setState(() {
-                              _selectedPetDocId = docId;
-                              _selectedPetId = data['petId'];
-                              _selectedPetName = data['petName'];
-                              _selectedBreed = data['breed'] ?? data['species'];
-                            });
-                          }
-                        },
-                        validator: (v) => _selectedPetDocId == null
-                            ? 'Please select pet'
-                            : null,
-                      );
-                    },
-                  ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _chiefComplaintController,
-                  style: normalInputTextStyle,
-                  decoration: _inputDeco('CHIEF COMPLAINT / REASON*',
-                      hint: 'e.g. Severe vomiting and dehydration'),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Required' : null,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedStatus,
-                        style: normalInputTextStyle,
-                        decoration: _inputDeco('INITIAL STATUS*'),
-                        items: ['STABLE', 'OBSERVATION', 'URGENT', 'CRITICAL']
-                            .map((e) => DropdownMenuItem(
-                                value: e,
-                                child: Text(e, style: normalInputTextStyle)))
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => _selectedStatus = val!),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _locationBayController,
-                        style: normalInputTextStyle,
-                        decoration: _inputDeco('BAY / WARD LOCATION*'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text('INITIAL VITALS',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF475569),
-                        letterSpacing: 0.5)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                        child: TextFormField(
-                            controller: _tempController,
-                            style: normalInputTextStyle,
-                            decoration: _inputDeco('Temp (°C)'))),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: TextFormField(
-                            controller: _heartRateController,
-                            style: normalInputTextStyle,
-                            decoration: _inputDeco('Heart Rate'))),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: TextFormField(
-                            controller: _weightController,
-                            style: normalInputTextStyle,
-                            decoration: _inputDeco('Weight (kg)'))),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                        ),
-                        child: const Text('Cancel',
-                            style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.bold))),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveIntake,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 24, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : const Text('Record Admission',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String count;
-  final IconData icon;
-  final Color iconBgColor;
-  final Color iconColor;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _StatCard({
-    required this.label,
-    required this.count,
-    required this.icon,
-    required this.iconBgColor,
-    required this.iconColor,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? iconColor : const Color(0xFFE2E8F0),
-              width: isSelected ? 2.2 : 1.0,
-            ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                        color: iconColor.withOpacity(0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2))
-                  ]
-                : [],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: iconBgColor,
-                    borderRadius: BorderRadius.circular(10)),
-                child: Icon(icon, color: iconColor, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected
-                              ? iconColor
-                              : const Color(0xFF94A3B8))),
-                  const SizedBox(height: 2),
-                  Text(count,
-                      style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A))),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1463,7 +1383,7 @@ class _TopHeader extends StatelessWidget {
           Row(
             children: const [
               Icon(Icons.help_outline, color: Color(0xFF64748B), size: 20),
-              SizedBox(width: 16),
+              SizedBox(width: 12),
               Icon(Icons.grid_view, color: Color(0xFF64748B), size: 20),
             ],
           ),

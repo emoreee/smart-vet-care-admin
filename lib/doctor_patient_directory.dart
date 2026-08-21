@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'doctor_dashboard.dart';
 
 class DoctorPatientDirectoryScreen extends StatefulWidget {
@@ -11,8 +12,29 @@ class DoctorPatientDirectoryScreen extends StatefulWidget {
 
 class _DoctorPatientDirectoryScreenState
     extends State<DoctorPatientDirectoryScreen> {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final String _currentDoctorName = 'Dr. Tamesis';
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   String _selectedSpecies = 'All Species';
   String _selectedStatus = 'Any Status';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,12 +67,11 @@ class _DoctorPatientDirectoryScreenState
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF0F172A),
-                            fontFamily: 'Serif',
                           ),
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Manage and monitor health records for all registered patients.',
+                          'Manage and monitor health records for patients assigned to Dr. Tamesis.',
                           style:
                               TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                         ),
@@ -60,22 +81,22 @@ class _DoctorPatientDirectoryScreenState
                         Row(
                           children: [
                             const _StatCard(
-                              title: 'TOTAL PATIENTS',
-                              value: '1,284',
-                              subtext: '+12% this month',
+                              title: 'ASSIGNED PATIENTS',
+                              value: '04',
+                              subtext: 'Active under Dr. Tamesis',
                               subtextColor: Color(0xFF16A34A),
                             ),
                             const SizedBox(width: 16),
                             const _StatCard(
                               title: 'IN TREATMENT',
-                              value: '42',
+                              value: '02',
                               subtext: 'Requires daily monitoring',
                               subtextColor: Color(0xFF64748B),
                             ),
                             const SizedBox(width: 16),
                             const _StatCard(
                               title: 'PENDING FOLLOW-UPS',
-                              value: '18',
+                              value: '01',
                               subtext: 'Scheduled for this week',
                               subtextColor: Color(0xFF64748B),
                             ),
@@ -116,7 +137,7 @@ class _DoctorPatientDirectoryScreenState
                         ),
                         const SizedBox(height: 24),
 
-                        // Main Table Container
+                        // Main Table Container Connected to Firestore
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -183,7 +204,6 @@ class _DoctorPatientDirectoryScreenState
                                     ),
                                     const SizedBox(width: 12),
 
-                                    // Extra Filter Icon
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
@@ -199,78 +219,94 @@ class _DoctorPatientDirectoryScreenState
                               const Divider(
                                   height: 1, color: Color(0xFFE2E8F0)),
 
-                              // Patient Directory Table
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 24.0, vertical: 12.0),
-                                child: Table(
-                                  columnWidths: const {
-                                    0: FlexColumnWidth(2.2), // PATIENT NAME
-                                    1: FlexColumnWidth(1.8), // SPECIES / BREED
-                                    2: FlexColumnWidth(2.0), // OWNER NAME
-                                    3: FlexColumnWidth(1.8), // LAST VISIT
-                                    4: FlexColumnWidth(1.6), // HEALTH STATUS
-                                    5: FlexColumnWidth(1.0), // ACTIONS
-                                  },
-                                  defaultVerticalAlignment:
-                                      TableCellVerticalAlignment.middle,
-                                  children: [
-                                    const TableRow(
+                              // Real-Time StreamBuilder for Doctor's Patients
+                              StreamBuilder<QuerySnapshot>(
+                                stream: _db
+                                    .collection('appointments')
+                                    .where('doctor',
+                                        isEqualTo: _currentDoctorName)
+                                    .snapshots(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 40.0),
+                                      child: Center(
+                                          child: CircularProgressIndicator()),
+                                    );
+                                  }
+
+                                  final docs = snapshot.hasData
+                                      ? snapshot.data!.docs
+                                      : [];
+
+                                  final filteredDocs = docs.where((doc) {
+                                    final data =
+                                        doc.data() as Map<String, dynamic>;
+                                    final petName =
+                                        (data['petName'] ?? data['name'] ?? '')
+                                            .toString()
+                                            .toLowerCase();
+                                    final owner = (data['ownerName'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+                                    final petId = (data['petId'] ?? '')
+                                        .toString()
+                                        .toLowerCase();
+
+                                    return petName.contains(_searchQuery) ||
+                                        owner.contains(_searchQuery) ||
+                                        petId.contains(_searchQuery);
+                                  }).toList();
+
+                                  if (filteredDocs.isEmpty) {
+                                    return const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 40.0),
+                                      child: Center(
+                                        child: Text(
+                                          'No patients currently assigned to Dr. Tamesis.',
+                                          style: TextStyle(
+                                              color: Color(0xFF94A3B8),
+                                              fontSize: 13,
+                                              fontStyle: FontStyle.italic),
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 24.0, vertical: 12.0),
+                                    child: Table(
+                                      columnWidths: const {
+                                        0: FlexColumnWidth(2.2),
+                                        1: FlexColumnWidth(1.8),
+                                        2: FlexColumnWidth(2.0),
+                                        3: FlexColumnWidth(1.8),
+                                        4: FlexColumnWidth(1.6),
+                                        5: FlexColumnWidth(1.0),
+                                      },
+                                      defaultVerticalAlignment:
+                                          TableCellVerticalAlignment.middle,
                                       children: [
-                                        _TableHeader('PATIENT NAME'),
-                                        _TableHeader('SPECIES / BREED'),
-                                        _TableHeader('OWNER NAME'),
-                                        _TableHeader('LAST VISIT'),
-                                        _TableHeader('HEALTH STATUS'),
-                                        _TableHeader('ACTIONS'),
+                                        const TableRow(
+                                          children: [
+                                            _TableHeader('PATIENT NAME'),
+                                            _TableHeader('SPECIES / BREED'),
+                                            _TableHeader('OWNER NAME'),
+                                            _TableHeader('LAST VISIT'),
+                                            _TableHeader('HEALTH STATUS'),
+                                            _TableHeader('ACTIONS'),
+                                          ],
+                                        ),
+                                        for (var doc in filteredDocs)
+                                          _buildPatientRowFromFirestore(doc),
                                       ],
                                     ),
-                                    _buildPatientRow(
-                                      name: 'Luna',
-                                      id: '#PT-8821',
-                                      species: 'Canine',
-                                      breed: 'Golden Retriever',
-                                      owner: 'Robert Harrison',
-                                      visitDate: 'Oct 12, 2023',
-                                      visitType: 'Routine Checkup',
-                                      status: 'STABLE',
-                                      statusType: 'stable',
-                                    ),
-                                    _buildPatientRow(
-                                      name: 'Oliver',
-                                      id: '#PT-9012',
-                                      species: 'Feline',
-                                      breed: 'Siamese',
-                                      owner: 'Sarah Miller',
-                                      visitDate: 'Oct 21, 2023',
-                                      visitType: 'Post-Surgery',
-                                      status: 'IN TREATMENT',
-                                      statusType: 'treatment',
-                                    ),
-                                    _buildPatientRow(
-                                      name: 'Coco',
-                                      id: '#PT-1154',
-                                      species: 'Avian',
-                                      breed: 'Amazon Parrot',
-                                      owner: 'James Wilson',
-                                      visitDate: 'Oct 18, 2023',
-                                      visitType: 'Vaccination',
-                                      status: 'FOLLOW-UP',
-                                      statusType: 'followup',
-                                    ),
-                                    _buildPatientRow(
-                                      name: 'Max',
-                                      id: '#PT-4423',
-                                      species: 'Canine',
-                                      breed: 'Beagle',
-                                      owner: 'Emily Davis',
-                                      visitDate: 'Oct 05, 2023',
-                                      visitType: 'Dental Cleaning',
-                                      status: 'STABLE',
-                                      statusType: 'stable',
-                                    ),
-                                  ],
-                                ),
+                                  );
+                                },
                               ),
 
                               const Divider(
@@ -284,7 +320,8 @@ class _DoctorPatientDirectoryScreenState
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('Showing 1-10 of 1,284 patients',
+                                    const Text(
+                                        'Showing active assigned patients',
                                         style: TextStyle(
                                             fontSize: 12,
                                             color: Color(0xFF64748B))),
@@ -296,12 +333,6 @@ class _DoctorPatientDirectoryScreenState
                                                 color: Color(0xFF94A3B8)),
                                             onPressed: null),
                                         _buildPageBadge('1', isSelected: true),
-                                        _buildPageBadge('2'),
-                                        _buildPageBadge('3'),
-                                        const Text('  ...  128  ',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: Color(0xFF64748B))),
                                         const IconButton(
                                             icon: Icon(Icons.chevron_right,
                                                 size: 18,
@@ -327,78 +358,95 @@ class _DoctorPatientDirectoryScreenState
     );
   }
 
-  // 1. Sidebar Widget
+  // 1. Sidebar Widget (MATCHED WITH MAIN DASHBOARD DESIGN & ZERO TRANSITION)
   Widget _buildDoctorSidebar(BuildContext context) {
     return Container(
       width: 240,
-      color: const Color(0xFF0A0F1D),
+      color: const Color(0xFF0F172A),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  'VetClinic Pro',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontFamily: 'Serif'),
+            child: Row(
+              children: [
+                const Icon(Icons.pets, color: Colors.white, size: 28),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'Furry Friends',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
+                    ),
+                    Text(
+                      'Doctor\'s Portal',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 2),
-                Text("DOCTOR'S PORTAL",
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF64748B),
-                        letterSpacing: 0.5)),
               ],
             ),
           ),
+          const SizedBox(height: 16),
           _buildNavItem(
-              context, Icons.grid_view_rounded, 'Main Dashboard', false, () {
+              context, Icons.dashboard_outlined, 'Main Dashboard', false, () {
             Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const DoctorDashboardScreen()));
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation1, animation2) =>
+                    const DoctorDashboardScreen(),
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+              ),
+            );
           }),
           _buildNavItem(
               context, Icons.pets_outlined, 'Patient Directory', true, null),
           _buildNavItem(context, Icons.mail_outline, 'Messages', false, () {}),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: const Color(0xFF131C31),
-                borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                const CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Color(0xFFCBD5E1),
-                  child: Icon(Icons.person, color: Color(0xFF0F172A), size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('Dr. Sarah Chen',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white)),
-                      SizedBox(height: 2),
-                      Text('Senior Veterinarian',
-                          style:
-                              TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-                    ],
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Color(0xFF0284C7),
+                    child: Icon(Icons.medical_services_outlined,
+                        color: Colors.white, size: 16),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _currentDoctorName,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12),
+                        ),
+                        const Text(
+                          'Attending Veterinarian',
+                          style:
+                              TextStyle(color: Color(0xFF94A3B8), fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -409,7 +457,7 @@ class _DoctorPatientDirectoryScreenState
   Widget _buildNavItem(BuildContext context, IconData icon, String title,
       bool isActive, VoidCallback? onTap) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         color: isActive ? const Color(0xFF1E293B) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -417,7 +465,7 @@ class _DoctorPatientDirectoryScreenState
       child: ListTile(
         dense: true,
         leading: Icon(icon,
-            color: isActive ? Colors.white : const Color(0xFF64748B), size: 18),
+            color: isActive ? Colors.white : const Color(0xFF94A3B8), size: 18),
         title: Text(
           title,
           style: TextStyle(
@@ -426,6 +474,7 @@ class _DoctorPatientDirectoryScreenState
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal),
         ),
         onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       ),
     );
   }
@@ -445,9 +494,11 @@ class _DoctorPatientDirectoryScreenState
             decoration: BoxDecoration(
                 color: const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(20)),
-            child: const TextField(
-              decoration: InputDecoration(
-                hintText: 'Search patients by name, owner, or ID...',
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(fontSize: 12),
+              decoration: const InputDecoration(
+                hintText: 'Search assigned patients by name or ID...',
                 hintStyle: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                 prefixIcon:
                     Icon(Icons.search, size: 18, color: Color(0xFF94A3B8)),
@@ -535,18 +586,18 @@ class _DoctorPatientDirectoryScreenState
     );
   }
 
-  // Patient Table Row Builder
-  TableRow _buildPatientRow({
-    required String name,
-    required String id,
-    required String species,
-    required String breed,
-    required String owner,
-    required String visitDate,
-    required String visitType,
-    required String status,
-    required String statusType,
-  }) {
+  // Patient Table Row Builder from Firestore Document
+  TableRow _buildPatientRowFromFirestore(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = data['petName'] ?? data['name'] ?? 'Pet Patient';
+    final id = data['petId'] ?? 'PET-00000';
+    final species = data['species'] ?? 'Canine';
+    final breed = data['breed'] ?? 'Mixed Breed';
+    final owner = data['ownerName'] ?? 'Owner';
+    final visitDate = data['date'] ?? 'Today';
+    final visitType = data['service'] ?? 'General Checkup';
+    final status = (data['status'] ?? 'Stable').toString().toUpperCase();
+
     return TableRow(
       children: [
         Padding(
@@ -602,17 +653,15 @@ class _DoctorPatientDirectoryScreenState
                     color: Color(0xFF0F172A))),
             Text(
               visitType,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: visitType == 'Post-Surgery'
-                    ? const Color(0xFFDC2626)
-                    : const Color(0xFF16A34A),
+                color: Color(0xFF16A34A),
               ),
             ),
           ],
         ),
-        _buildStatusBadge(status, statusType),
+        _buildStatusBadge(status),
         Row(
           children: [
             IconButton(
@@ -629,16 +678,13 @@ class _DoctorPatientDirectoryScreenState
     );
   }
 
-  Widget _buildStatusBadge(String text, String type) {
+  Widget _buildStatusBadge(String text) {
     Color bg = const Color(0xFFDCFCE7);
     Color color = const Color(0xFF16A34A);
 
-    if (type == 'treatment') {
-      bg = const Color(0xFFE0E7FF);
-      color = const Color(0xFF3730A3);
-    } else if (type == 'followup') {
-      bg = const Color(0xFFF1F5F9);
-      color = const Color(0xFF475569);
+    if (text.contains('TREATMENT') || text.contains('URGENT')) {
+      bg = const Color(0xFFFEF2F2);
+      color = const Color(0xFFDC2626);
     }
 
     return Container(
@@ -709,9 +755,8 @@ class _StatCard extends StatelessWidget {
                 style: const TextStyle(
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                    fontFamily: 'Serif')),
-            const SizedBox(height: 4),
+                    color: Color(0xFF0F172A))),
+            const SizedBox(height: 1),
             Text(subtext,
                 style: TextStyle(
                     fontSize: 10,
